@@ -46,7 +46,7 @@ uint8_t base_reg_read(uint8_t *buffedesired_value,int buffer_bytes)
     else
     {
             //if true, then write the value which is read and return pass
-			printf("\n Read value is %d \n",*buffedesired_value);
+            printf("\n Read value is %d \n",*buffedesired_value);
       return 0;
     }
 }
@@ -103,8 +103,9 @@ uint8_t temp_write_reg(uint8_t* x)
 //Common Custom function for all registers check for writing data to register
 uint8_t main_write_register(uint8_t register_addr, uint16_t desired_val)
 {
+  //Sent_Queue(Temp, Logging, "[INFO]", "Main Write Register Pass in second attempt\n");
   //register addr is the respective base address and desired value is the value you want to write in that registe
-	uint8_t buffer_array[3]={register_addr,desired_val>>8,desired_val & 0x00FF};
+    uint8_t buffer_array[3]={register_addr,desired_val>>8,desired_val & 0x00FF};
   int temp = ((register_addr < 0x01) || (register_addr > 0x03));
   if(temp)
     {
@@ -114,7 +115,7 @@ uint8_t main_write_register(uint8_t register_addr, uint16_t desired_val)
   temp = (write_reg_ptr(&register_addr));
   if(temp)
     {
-     	printf("[Error] In writing to register\n");
+         printf("[Error] In writing to register\n");
       return 1;
     }
   temp = (temp_write_reg(&buffer_array));
@@ -123,7 +124,6 @@ uint8_t main_write_register(uint8_t register_addr, uint16_t desired_val)
       printf("[Error]In writing to temp\n");
       return 1;
     }
-    Sent_Queue(Temp, Logging, "[INFO]", "Main Write Register Pass\n");
     return 0;
 }
 
@@ -142,7 +142,7 @@ uint8_t main_read_register(uint8_t register_addr, uint8_t* desired_val)
       printf("[Error]In reading from register");
       return 1;
     }
-    Sent_Queue(Temp, Logging, "[INFO]", "Main Read Register Pass\n");
+  //  Sent_Queue(Temp, Logging, "[INFO]", "Main Read Register Pass\n");
     return 0;
 }
 
@@ -176,7 +176,7 @@ uint8_t all_registers_check(void)
           printf("[Error]Tlow not read \n");
           return 1;
         }
-        Sent_Queue(Temp, Logging, "[INFO]", "All High low Pass\n");
+  //
         return 0;
 }
 
@@ -212,13 +212,13 @@ uint8_t config_register_temperature(void)
           return 1;
         }
 
-			  if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+              if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
         {
           printf("[Error]Fault Bits read");
           return 1;
         }
 
-			  if(main_write_register(Base_Config_register, EM_Mode_ON))
+              if(main_write_register(Base_Config_register, EM_Mode_ON))
         {
           printf("[Error]EM On write");
           return 1;
@@ -230,7 +230,7 @@ uint8_t config_register_temperature(void)
           return 1;
         }
 
-    		if(main_write_register(Base_Config_register, CR_MODE_ON))
+            if(main_write_register(Base_Config_register, CR_MODE_ON))
         {
           printf("[Error]CR On write");
           return 1;
@@ -239,10 +239,10 @@ uint8_t config_register_temperature(void)
         if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
         {
           Error_Data(Temp, "Error in Reading Base register", ENOMSG, Log_Native);
-        	return 1;
+            return 1;
         }
 
-        Sent_Queue(Temp, Logging, "[INFO]", "\nAll Registers Test Succeeded\n");
+    //    Sent_Queue(Temp, Logging, "[INFO]", "\nAll Registers Test Succeeded\n");
         return 0;
 }
 
@@ -276,8 +276,8 @@ uint8_t get_temp(float *final_temp_data_stored)
           Sent_Queue(Temp, Logging, "[INFO]", "\nValue is equals threshold\n");
           Warning_LED_Indicator = Base_Temperature;
         }
-				printf( "temp value : %f",*final_temp_data_stored );
-			  return 0;
+                printf( "temp value : %f",*final_temp_data_stored );
+              return 0;
 }
 
 //Function for starting thr Temperature sensor
@@ -295,7 +295,7 @@ uint8_t temp_initial_sensor(void)
                 Error_Data(Temp, "ioctl(): I2C Bus", errno, Log_Native);
                 return 1;
         }
-        Sent_Queue(Temp, Logging, "[INFO]", "\nI2C initialised properly with temp sensor\n");
+      //  Sent_Queue(Temp, Logging, "[INFO]", "\nI2C initialised properly with temp sensor\n");
         return 0;
 }
 
@@ -303,36 +303,36 @@ uint8_t temp_initial_sensor(void)
 uint8_t BIST_Temp_Check(void)
 {
     printf("\n In temp check function");
-		char data_print[60];
-		sprintf(data_print, "[INFO]Temperature Thread Created Successfully with TID: %ld\n", syscall(SYS_gettid));
+        char data_print[60];
+        sprintf(data_print, "[INFO]Temperature Thread Created Successfully with TID: %ld\n", syscall(SYS_gettid));
     Sent_Queue(Temp, Logging, "[INFO]", data_print);
-		sprintf(data_print, "[INFO]PID: %ld\n", syscall(SYS_getpid));
+        sprintf(data_print, "[INFO]PID: %ld\n", syscall(SYS_getpid));
     Sent_Queue(Temp, Logging, "[INFO]", data_print);
 
-		pthread_mutex_lock(&lock);
+        pthread_mutex_lock(&lock);
 
     int temp = temp_initial_sensor();
-		if(temp != 0)
-		{
+        if(temp != 0)
+        {
       printf("\n Sensor not initilised");
-			Error_Data(Temp, "[Error]Temperataure sensor not initialised \n", ENOMSG, Log_Native);
-			pthread_mutex_unlock(&lock);
-			return 1;
-		}
+            Error_Data(Temp, "[Error]Temperataure sensor not initialised \n", ENOMSG, Log_Native);
+            pthread_mutex_unlock(&lock);
+            return 1;
+        }
     else
     {
       printf("\n in success loop");
       Sent_Queue(Temp, Logging, "INFO", "\nTemperature Sensor Initiliazed Successfully\n");
     }
 
-		int temp1 = main_write_register(Base_Config_register, Configuration_Register_Default_1);
-		if(temp1 != 0)
-		{
+        int temp1 = main_write_register(Base_Config_register, Configuration_Register_Default_1);
+        if(temp1 != 0)
+        {
       printf("\n reset successfullu not done");
-			Error_Data(Temp, "[Error]Sensor Not reset properly\n", ENOMSG, Log_Native);
-			pthread_mutex_unlock(&lock);
-			return 1;
-		}
+            Error_Data(Temp, "[Error]Sensor Not reset properly\n", ENOMSG, Log_Native);
+            pthread_mutex_unlock(&lock);
+            return 1;
+        }
     else
     {
       printf("\n reset successfullu done");
@@ -340,34 +340,34 @@ uint8_t BIST_Temp_Check(void)
     }
 
     int temp2 = all_registers_check();
-		if(temp2 !=0)
-		{
-		  Error_Data(Temp, "[Error]All registers not checked successfully\n", ENOMSG, Log_Native);
-			pthread_mutex_unlock(&lock);
-			return 1;
-		}
-		else
-		{
+        if(temp2 !=0)
+        {
+          Error_Data(Temp, "[Error]All registers not checked successfully\n", ENOMSG, Log_Native);
+            pthread_mutex_unlock(&lock);
+            return 1;
+        }
+        else
+        {
       printf("Register OK\n");
       Sent_Queue(Temp, Logging, "[INFO]", "\nAll registers check Successfully\n");
-		}
+        }
 
-		int temp3 = config_register_temperature();
-		if(temp3 != 0)
-		{
-			Error_Data(Temp, "[Error]BST not success\n", ENOMSG, Log_Native);
-			pthread_mutex_unlock(&lock);
-			return 1;
-		}
-		else
-		{
+        int temp3 = config_register_temperature();
+        if(temp3 != 0)
+        {
+            Error_Data(Temp, "[Error]BST not success\n", ENOMSG, Log_Native);
+            pthread_mutex_unlock(&lock);
+            return 1;
+        }
+        else
+        {
       printf("Bist Pass\n");
-			Sent_Queue(Temp, Logging, "[INFO]", "Built In Success\n");
-		}
+            Sent_Queue(Temp, Logging, "[INFO]", "Built In Success\n");
+        }
 
-		 pthread_mutex_unlock(&lock);
+         pthread_mutex_unlock(&lock);
      printf("Normal function\n");
-	 	 Sent_Queue(Temp, Logging, "[INFO]", "Normal thread of temp started\n");
+         // Sent_Queue(Temp, Logging, "[INFO]", "Normal thread of temp started\n");
     return 0;
 
 }
