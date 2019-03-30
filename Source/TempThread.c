@@ -15,10 +15,10 @@ uint8_t Warning_LED_Indicator = Base_Temperature;
 
 
 //Function For Base register write
-uint8_t base_reg_write(uint8_t* buffer_value,int buffer_bytes)
+uint8_t base_reg_write(uint8_t* buffedesired_value,int buffer_bytes)
 {
         //Go and write to a particular location, store value in temp var
-    int temp=write(File_Descriptor, buffer_value, buffer_bytes);
+    int temp=write(File_Descriptor, buffedesired_value, buffer_bytes);
         //Check if temp is equla to bytes read or not
     if(temp!=buffer_bytes)
     {
@@ -33,10 +33,10 @@ uint8_t base_reg_write(uint8_t* buffer_value,int buffer_bytes)
 }
 
 //Function for base register read
-uint8_t base_reg_read(uint8_t *buffer_value,int buffer_bytes)
+uint8_t base_reg_read(uint8_t *buffedesired_value,int buffer_bytes)
 {
       //Go and read from the particular location
-    int temp =read(File_Descriptor, buffer_value, buffer_bytes);
+    int temp =read(File_Descriptor, buffedesired_value, buffer_bytes);
         //check if temp is equal to bytes read
     if(temp!=buffer_bytes)
     {
@@ -46,7 +46,7 @@ uint8_t base_reg_read(uint8_t *buffer_value,int buffer_bytes)
     else
     {
             //if true, then write the value which is read and return pass
-			printf("\n Read value is %d \n",*buffer_value);
+			printf("\n Read value is %d \n",*buffedesired_value);
       return 0;
     }
 }
@@ -114,16 +114,17 @@ uint8_t main_write_register(uint8_t register_addr, uint16_t desired_val)
   temp = (write_reg_ptr(&register_addr));
   if(temp)
     {
-     	Error_Data(Temp, "[Error] In writing to register", errno, Log_Native);
+     	printf("[Error] In writing to register\n");
       return 1;
     }
   temp = (temp_write_reg(&buffer_array));
   if(temp)
     {
-      Error_Data(Temp, "[Error]In writing to temp", errno, Log_Native);
+      printf("[Error]In writing to temp\n");
       return 1;
     }
-      return 0;
+    Sent_Queue(Temp, Logging, "[INFO]", "Main Write Register Pass\n");
+    return 0;
 }
 
 //Common Custom function for all registers check for reading data to register
@@ -132,16 +133,17 @@ uint8_t main_read_register(uint8_t register_addr, uint8_t* desired_val)
   int temp = (write_reg_ptr(&register_addr));
   if(temp)
     {
-      Error_Data(Temp, "[Error]In writing to register", errno, Log_Native);
+      printf("[Error]In writing to register\n");
       return 1;
     }
   temp = (temp_read_reg(desired_val));
   if(temp)
     {
-      Error_Data(Temp, "[Error]In reading from register", errno, Log_Native);
+      printf("[Error]In reading from register");
       return 1;
     }
-      return 0;
+    Sent_Queue(Temp, Logging, "[INFO]", "Main Read Register Pass\n");
+    return 0;
 }
 
 //Check all registers for write and read equality for thigh and tlow
@@ -174,6 +176,7 @@ uint8_t all_registers_check(void)
           printf("[Error]Tlow not read \n");
           return 1;
         }
+        Sent_Queue(Temp, Logging, "[INFO]", "All High low Pass\n");
         return 0;
 }
 
@@ -235,7 +238,7 @@ uint8_t config_register_temperature(void)
 
         if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
         {
-          Error_Data(Temp, "Read: Base_Config_register", ENOMSG, Log_Native);
+          Error_Data(Temp, "Error in Reading Base register", ENOMSG, Log_Native);
         	return 1;
         }
 
@@ -243,7 +246,7 @@ uint8_t config_register_temperature(void)
         return 0;
 }
 
-
+//Function for calculating the final value of temperature using ADC
 uint8_t get_temp(float *final_temp_data_stored)
 {
         static uint8_t Register_buffer_storage[2];
@@ -277,7 +280,7 @@ uint8_t get_temp(float *final_temp_data_stored)
 			  return 0;
 }
 
-
+//Function for starting thr Temperature sensor
 uint8_t temp_initial_sensor(void)
 {
         //I2c Bus opened // path is predefined
@@ -296,6 +299,7 @@ uint8_t temp_initial_sensor(void)
         return 0;
 }
 
+//Function for checking thr BST of Temperature
 uint8_t BIST_Temp_Check(void)
 {
     printf("\n In temp check function");
@@ -361,9 +365,9 @@ uint8_t BIST_Temp_Check(void)
 			Sent_Queue(Temp, Logging, "[INFO]", "Built In Success\n");
 		}
 
-		pthread_mutex_unlock(&lock);
+		 pthread_mutex_unlock(&lock);
      printf("Normal function\n");
-		Sent_Queue(Temp, Logging, "[INFO]", "Normal thread of temp started\n");
+	 	 Sent_Queue(Temp, Logging, "[INFO]", "Normal thread of temp started\n");
     return 0;
 
 }
