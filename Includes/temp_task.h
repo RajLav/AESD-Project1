@@ -1,51 +1,51 @@
+
 /*
 *@File:temp_task.h
 *@Description_File: Header File for Temperature Sensor
-*@Author:Raj Lavingia
+*@Author:Raj Lavingia and Yash Gupte
 *@Date: 03/23/2018
 */
 
-//Libraries inclided
-#include <errno.h>
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <signal.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <assert.h>
-#include <linux/i2c-dev.h>
-#include <sys/ioctl.h>
-#include <sys/types.h>
-#include <stdint.h>
-#include <mqueue.h>
+//Includes
+#include "main.h"
 
-#define celsius 0
-#define kelvin 1
-#define fehrenheit 2
-#define bus  (char*)"/dev/i2c-2" //path in bbg
-#define addrabc (0x48)
-//float c,k,f; //for temperature variations
-//int buffer_value; //buffer in which value is put
-int ret_ioctl; //return for ret_ioctl
-int ret_write_register; //return for write rgeister
-int ret_write_lower_register; //return for write lower reg
-int temp3;
-unsigned char MSB, LSB;
+//Macros Defined
+#define Threshold_upper_Limit (30)
+#define Threshold_lower_Limit (10)
+#define Address_I2C        0x48
+#define Base_Temperature    0x00
+#define Above_Threshold        0x01
+#define Below_Threshold        0x02
+#define TLow_register            0x02
+#define THigh_register        0x03
+#define Base_Config_register        0x01
+#define Configuration_Register_Default_1        0x6080
+#define Configuration_Register_Default_2        0x60A0
+#define SM_MODE_ON        0x6180
+#define SM_MODE_OFF        0x6080
+#define Fault_Bits_Read        0x7880
+#define EM_Mode_ON        0x6090
+#define EM_Mode_OFF    0x6080
+#define CR_MODE_ON        0x6040
+#define Retry_Mode_ON			10
+#define Temp_No_Retry					0
+#define data_register_read			0x00
 
 
-int temp_sensor_init(); //Used for temperature sensor initialisation
-float final_read_temperature(int unit);
-int all_temprg_rd_wr();
-uint16_t read_temp_config_register();
-int write_config_register_default();
-int write_config_reg_conv_rate(uint8_t value );
-int write_config_reg_em(uint8_t value );
-int write_config_reg_on_off(uint8_t value );
+//Function Prototypes
+uint8_t base_reg_write(uint8_t* buffer_value,int buffer_bytes);
+void * TempThread(void * args);
+uint8_t TempThread_Init(void);
+uint8_t base_reg_read(uint8_t *buffer_value,int buffer_bytes);
+uint8_t write_reg_ptr(uint8_t* x);
+uint8_t temp_read_reg(uint8_t* x);
+uint8_t temp_write_reg(uint8_t* x);
+uint8_t main_write_register(uint8_t register_addr, uint16_t desired_val);
+uint8_t main_read_register(uint8_t register_addr, uint8_t* desired_val);
+uint8_t all_registers_check(void);
+uint8_t config_register_temperature(void);
+uint8_t get_temp(float *t_data);
+uint8_t temp_initial_sensor(void);
+uint8_t BIST_Temp_Check(void);
 
-int write_lower_register(int reg, uint16_t value );
-void write_register(uint8_t value);
-uint16_t read_high_register(int reg);
-int write_high_register(int reg, uint16_t value );
-uint16_t read_lower_register(int reg);
+
