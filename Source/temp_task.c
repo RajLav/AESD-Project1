@@ -1,258 +1,389 @@
 /*
 *@File:temp_task.c
 *@Description_File: C File for Temperature Sensor
-*@Author:Raj Lavingia
+*@Author:Raj Lavingia and Yash Gupte
 *@Date: 03/23/2018
 */
+#include "TempThread.h"
+#include "POSIX_Qs.h"
+#include "main.h"
 
-//Include temperature task header file from Include Folder
-#include "temp_task.h"
+//pthread mutex lock used for locking unlocking of data
+pthread_mutex_t lock;
+
+uint8_t Warning_LED_Indicator = Base_Temperature;
 
 
-char convert_data[2] = {0};
-uint8_t default_config_byte_one = 0x60;
-uint8_t default_config_byte_two = 0xA0;
-int buffer_value;
-void write_register(uint8_t value)
+//Function For Base register write
+uint8_t base_reg_write(uint8_t* buffer_value,int buffer_bytes)
 {
-  ret_write_register = write(buffer_value, &value, sizeof(value));
-//  printf("\nValue of ret_write_register: %d",ret_write_register);
-  if(ret_write_register <0)
-  {
-    //check if valid value
-    printf("\nError is there\n");
-  }
+        //Go and write to a particular location, store value in temp var
+    int temp=write(File_Descriptor, buffer_value, buffer_bytes);
+        //Check if temp is equla to bytes read or not
+    if(temp!=buffer_bytes)
+    {
+            //if not then return fail
+      return 1;
+    }
+    else
+    {
+            //else return pass
+      return 0;
+    }
+}
+
+//Function for base register read
+uint8_t base_reg_read(uint8_t *buffer_value,int buffer_bytes)
+{
+      //Go and read from the particular location
+    int temp =read(File_Descriptor, buffer_value, buffer_bytes);
+        //check if temp is equal to bytes read
+    if(temp!=buffer_bytes)
+    {
+            //if not then return fail
+      return 1;
+    }
+    else
+    {
+            //if true, then write the value which is read and return pass
+			printf("\n Read value is %d \n",*buffer_value);
+      return 0;
+    }
+}
+
+uint8_t write_reg_ptr(uint8_t* x)
+{
+      //Check if the temp value is returned success by the base reg Write_Register_Pointer
+    int temp = base_reg_write(x,1);
+          //if not equal to 0 return fail
+    if(temp!=0)
+    {
+            //if equal to 0 then let this function retrun 0
+      return 1;
+    }
+    else
+    {
+      return 0;
+    }
+}
+
+uint8_t temp_read_reg(uint8_t* x)
+{
+      //while reading , it will read 2 bytes not 3
+    uint8_t temp = base_reg_read(x,2);
+    if(temp!=0)
+    {
+      //if equal to anything else then return 1
+      return 1;
+    }
+    else
+    {
+      //if equal to 0 then return success
+      return 0;
+    }
+}
+//While sending bytes in write send 3 bytyes, lower 8, higher 8 and base address
+uint8_t temp_write_reg(uint8_t* x)
+{
+        //if return not equal to 0 the return fail
+    int temp = base_reg_write(x,3);
+    if(temp!=0)
+    {
+      return 1;
+    }
+
+    else
+    {
+            //if equal to 0 then return success
+      return 0;
+    }
 
 }
 
-int write_lower_register(int reg, uint16_t value )
+//Common Custom function for all registers check for writing data to register
+uint8_t main_write_register(uint8_t register_addr, uint16_t desired_val)
 {
-  write_register(reg);
-  uint8_t fd = value >>8;
-  int value1 = value & 0x00FF;
-  uint8_t bufftemp[3] = {0x02, fd, value1};
-  int bufftemp1 = write(buffer_value, &bufftemp, sizeof(bufftemp));
-  if ((bufftemp1) < 0)
-  {
-    printf("\nError is there\n");
-    return -1;
-  }
-  return 0;
+  //register addr is the respective base address and desired value is the value you want to write in that registe
+	uint8_t buffer_array[3]={register_addr,desired_val>>8,desired_val & 0x00FF};
+  int temp = ((register_addr < 0x01) || (register_addr > 0x03));
+  if(temp)
+    {
+      printf("[Error] In register addressing\n");
+      return 1;
+    }
+  temp = (write_reg_ptr(&register_addr));
+  if(temp)
+    {
+     	Error_Data(Temp, "[Error] In writing to register", errno, Log_Native);
+      return 1;
+    }
+  temp = (temp_write_reg(&buffer_array));
+  if(temp)
+    {
+      Error_Data(Temp, "[Error]In writing to temp", errno, Log_Native);
+      return 1;
+    }
+      return 0;
 }
 
-uint16_t read_lower_register(int reg)
+//Common Custom function for all registers check for reading data to register
+uint8_t main_read_register(uint8_t register_addr, uint8_t* desired_val)
 {
-  uint16_t value;
-  uint8_t v[2]={0};
-  write_register(reg);
-  int temp1 = read(buffer_value,v,sizeof(v));
-  if (temp1 <0)
-  {
-    printf("\nError is there\n");
-    return -1;
-  }
-  printf("T-low register value is: %x %x\n", v[0], v[1]);
-  return value;
+  int temp = (write_reg_ptr(&register_addr));
+  if(temp)
+    {
+      Error_Data(Temp, "[Error]In writing to register", errno, Log_Native);
+      return 1;
+    }
+  temp = (temp_read_reg(desired_val));
+  if(temp)
+    {
+      Error_Data(Temp, "[Error]In reading from register", errno, Log_Native);
+      return 1;
+    }
+      return 0;
 }
 
-int write_high_register(int reg, uint16_t value )
+//Check all registers for write and read equality for thigh and tlow
+uint8_t all_registers_check(void)
 {
-  write_register(reg);
-  uint8_t fd6 = value >>8;
-  int value1 = value & 0x00FF;
-  uint8_t bufftemp[3] = {0x03, fd6, value1};
-  int bufftemp1 = write(buffer_value, &bufftemp, sizeof(bufftemp));
-  if ((bufftemp1) < 0)
-  {
-    printf("\nwrite Error is there\n");
-    return -1;
-  }
-  return 0;
+        static uint8_t Register_buffer_storage[2];
+        uint16_t final_threshold_high = Threshold_upper_Limit << 8;
+        int temp = (main_write_register(THigh_register, final_threshold_high));
+        if(temp)
+        {
+          printf("[Error]Thigh not written \n");
+          return 1;
+        }
+        temp=(main_read_register(THigh_register, &Register_buffer_storage[0]));
+        if(temp)
+        {
+          printf("[Error]Thigh not read \n");
+          return 1;
+        }
+
+        temp = (main_write_register(TLow_register, Threshold_lower_Limit << 8));
+        if(temp)
+        {
+          printf("[Error]Tlow not written \n");
+          return 1;
+        }
+
+        if(main_read_register(TLow_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]Tlow not read \n");
+          return 1;
+        }
+        return 0;
+}
+
+//Configuration register write and read values
+uint8_t config_register_temperature(void)
+{
+        static uint8_t Register_buffer_storage[2];
+        static char Text_Log_Printed[150];
+
+        if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]Config Register not written properly\n");
+          return 1;
+        }
+
+        Sent_Queue(Temp, Logging, "[INFO]", "\nConfig Test Success\n");
+
+        if(main_write_register(Base_Config_register, SM_MODE_ON))
+        {
+          printf("[Error]SM Mode On write\n");
+          return 1;
+        }
+
+        if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]SM Mode On read\n");
+          return 1;
+        }
+
+        if(main_write_register(Base_Config_register, Fault_Bits_Read))
+        {
+          printf("[Error]Fault Bits write");
+          return 1;
+        }
+
+			  if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]Fault Bits read");
+          return 1;
+        }
+
+			  if(main_write_register(Base_Config_register, EM_Mode_ON))
+        {
+          printf("[Error]EM On write");
+          return 1;
+        }
+
+        if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]EM On read");
+          return 1;
+        }
+
+    		if(main_write_register(Base_Config_register, CR_MODE_ON))
+        {
+          printf("[Error]CR On write");
+          return 1;
+        }
+
+        if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          Error_Data(Temp, "Read: Base_Config_register", ENOMSG, Log_Native);
+        	return 1;
+        }
+
+        Sent_Queue(Temp, Logging, "[INFO]", "\nAll Registers Test Succeeded\n");
+        return 0;
 }
 
 
-uint16_t read_high_register(int reg)
+uint8_t get_temp(float *final_temp_data_stored)
 {
-  uint16_t value;
-  uint8_t v[2]={0};
-  write_register(reg);
-  int temp1 = read(buffer_value,v,sizeof(v));
-  if (temp1 <0)
-  {
-    printf("\nError is there\n");
-    return -1;
-  }
-  printf("T-High register value is: %x %x\n", v[0], v[1]);
-  return value;
+        static uint8_t Register_buffer_storage[2];
+        int temp = (main_read_register(data_register_read, &Register_buffer_storage[0]));
+        if(temp)
+        {
+          Error_Data(Temp, "Register read fail\n", ENOMSG, Log_Native);
+          return 1;
+        }
+        *final_temp_data_stored = ((Register_buffer_storage[0] << 8) | Register_buffer_storage[1]) >> 4;
+        *final_temp_data_stored *= 0.0625;
+        printf( "Generated Temp Value : %f",*final_temp_data_stored );
+        //check for thresholds
+
+        if(*final_temp_data_stored < Threshold_lower_Limit)
+        {
+          Sent_Queue(Temp, Logging, "[INFO]", "\nValue is below threshold\n");
+          Warning_LED_Indicator = Below_Threshold;
+        }
+        else if(*final_temp_data_stored > Threshold_upper_Limit)
+        {
+          Sent_Queue(Temp, Logging, "[INFO]", "\nValue is Above threshold\n");
+          Warning_LED_Indicator = Above_Threshold;
+        }
+        else
+        {
+          Sent_Queue(Temp, Logging, "[INFO]", "\nValue is equals threshold\n");
+          Warning_LED_Indicator = Base_Temperature;
+        }
+				printf( "temp value : %f",*final_temp_data_stored );
+			  return 0;
 }
 
 
-int configuration_register_write(int reg, uint16_t value )
+uint8_t temp_initial_sensor(void)
 {
-  write_register(reg);
-  uint8_t fd6 = value >>8;
-  int value1 = value & 0x00FF;
-  uint8_t bufftemp[3] = {0x01, fd6, value1};
-  int bufftemp1 = write(buffer_value, &bufftemp, sizeof(bufftemp));
-  if ((bufftemp1) < 0)
-  {
-    printf("\nwrite Error is there\n");
-    return -1;
-  }
-  return 0;
+        //I2c Bus opened // path is predefined
+        File_Descriptor = open(I2C_BUS, O_RDWR);
+        if(File_Descriptor <0)
+        {
+                Error_Data(Temp, "open(): I2C Bus", errno, Log_Native);
+                return 1;
+        }
+        if(ioctl(File_Descriptor, I2C_SLAVE, Address_I2C) <0)
+        {
+                Error_Data(Temp, "ioctl(): I2C Bus", errno, Log_Native);
+                return 1;
+        }
+        Sent_Queue(Temp, Logging, "[INFO]", "\nI2C initialised properly with temp sensor\n");
+        return 0;
 }
 
-
-uint16_t configuration_register_read(int reg)
+uint8_t BIST_Temp_Check(void)
 {
-  uint16_t value;
-  uint8_t v[2]={0};
-  write_register(reg);
-  int temp1 = read(buffer_value,v,sizeof(v));
-  if (temp1 <0)
-  {
-    printf("\nError is there\n");
-    return -1;
-  }
-  printf("T-High register value is: %x %x\n", v[0], v[1]);
-  return value;
+    printf("\n In temp check function");
+		char data_print[60];
+		sprintf(data_print, "[INFO]Temperature Thread Created Successfully with TID: %ld\n", syscall(SYS_gettid));
+    Sent_Queue(Temp, Logging, "[INFO]", data_print);
+		sprintf(data_print, "[INFO]PID: %ld\n", syscall(SYS_getpid));
+    Sent_Queue(Temp, Logging, "[INFO]", data_print);
+
+		pthread_mutex_lock(&lock);
+
+    int temp = temp_initial_sensor();
+		if(temp != 0)
+		{
+      printf("\n Sensor not initilised");
+			Error_Data(Temp, "[Error]Temperataure sensor not initialised \n", ENOMSG, Log_Native);
+			pthread_mutex_unlock(&lock);
+			return 1;
+		}
+    else
+    {
+      printf("\n in success loop");
+      Sent_Queue(Temp, Logging, "INFO", "\nTemperature Sensor Initiliazed Successfully\n");
+    }
+
+		int temp1 = main_write_register(Base_Config_register, Configuration_Register_Default_1);
+		if(temp1 != 0)
+		{
+      printf("\n reset successfullu not done");
+			Error_Data(Temp, "[Error]Sensor Not reset properly\n", ENOMSG, Log_Native);
+			pthread_mutex_unlock(&lock);
+			return 1;
+		}
+    else
+    {
+      printf("\n reset successfullu done");
+      Sent_Queue(Temp, Logging, "INFO", "\nReset Successfully\n");
+    }
+
+    int temp2 = all_registers_check();
+		if(temp2 !=0)
+		{
+		  Error_Data(Temp, "[Error]All registers not checked successfully\n", ENOMSG, Log_Native);
+			pthread_mutex_unlock(&lock);
+			return 1;
+		}
+		else
+		{
+      printf("Register OK\n");
+      Sent_Queue(Temp, Logging, "[INFO]", "\nAll registers check Successfully\n");
+		}
+
+		int temp3 = config_register_temperature();
+		if(temp3 != 0)
+		{
+			Error_Data(Temp, "[Error]BST not success\n", ENOMSG, Log_Native);
+			pthread_mutex_unlock(&lock);
+			return 1;
+		}
+		else
+		{
+      printf("Bist Pass\n");
+			Sent_Queue(Temp, Logging, "[INFO]", "Built In Success\n");
+		}
+
+		pthread_mutex_unlock(&lock);
+     printf("Normal function\n");
+		Sent_Queue(Temp, Logging, "[INFO]", "Normal thread of temp started\n");
+    return 0;
+
 }
-
-int configuration_register_fault_bits(int reg, uint16_t value )
+void bist()
 {
-  write_register(reg);
-  uint16_t fd6 ;
-    uint8_t bufftemp[2] = {0x01, value};
-  int bufftemp1 = write(buffer_value, &bufftemp, sizeof(bufftemp));
-  if ((bufftemp1) < 0)
+  uint8_t temp1;
+  //will check for all registers and start the temp sensor
+  temp1 = BIST_Temp_Check();
+  printf("\n success value is %d",temp1);
+  if(temp1)
   {
-    printf("\nwrite Error is there\n");
-    return -1;
-  }
-  return 0;
-}
-
-
-uint16_t configuration_register_read_faults_bits(int reg)
-{
-  uint16_t value = 0;
-  uint8_t v[1]={0};
-  write_register(reg);
-  int temp1 = read(buffer_value,&value,sizeof(value));
-  //value =((value & 0x0018)>>3);
-  if (temp1 <0)
-  {
-    printf("\nError is there\n");
-    return -1;
-  }
-  printf("T-High fault value is: %x\n", value);
-  //return value;
-}
-
-int configuration_register_EM_bits(int reg, uint16_t value )
-{
-  write_register(reg);
-  uint16_t fd6 ;
-  //value = 0xA060 | 0x1000;
-  printf("\n Value is %x \n",value);
-    uint8_t bufftemp[2] = {0x01, value};
-  int bufftemp1 = write(buffer_value, &bufftemp, sizeof(bufftemp));
-  if ((bufftemp1) < 0)
-  {
-    printf("\nwrite Error is there\n");
-    return -1;
-  }
-  return 0;
-}
-
-uint16_t configuration_register_read_EM(int reg)
-{
-  uint16_t value = 0;
-  uint8_t v[1]={0};
-  write_register(reg);
-  int temp1 = read(buffer_value,&value,sizeof(value));
-  //value =((value & 0x0018)>>3);
-  if (temp1 <0)
-  {
-    printf("\nError is there\n");
-    return -1;
-  }
-  printf("T-High fault value is: %x\n", value);
-  //return value;
-}
-float final_read_temperature(int temperature_unit)
-{
-
-  write_register(0);
-  int temp2 = read(buffer_value,&convert_data,sizeof(convert_data));
-  if (temp2 < 0)
-  {
-    printf("Error is there  : %s\n", strerror(errno));
-    return -300;
+    printf("\n inital temp check not success");
+    Error_Data(Temp, "Error while Initializing Temperature Sensor", ENOMSG, Log_Native);
+    IF_RETRY = Retry_Mode_ON;
+    Present_Temp_Sensor_Output = Sensor_Offline;
   }
   else
   {
-
-    temp3 = ((convert_data[0] << 8) | convert_data[1]) >> 4;
-
-    if(temperature_unit == celsius)
-    {
-      printf("Temperature in Celsius is %f \n",temp3*0.0625);
-    }
-    else if(temperature_unit == kelvin)
-    {
-      printf("Temperature in Kelvin is %f \n",(1.8 * (temp3*0.0625)) + 32);
-    }
-    else if(temperature_unit == fehrenheit)
-    {
-      printf("Temperature in Fehrenheit is %f \n", temp3*0.0625+ 273.15);
-    }
+    printf("\n inital temp check  success");
+    IF_RETRY = 0;
+    Present_Temp_Sensor_Output = Sensor_Online;
   }
-}
-
-int temp_sensor_init()
-{
-//  //Open the file system call
-  buffer_value = open(bus, O_RDWR);
-  //check if error is there or not in opening a file
-  if(buffer_value < 0)
-  {
-    printf("\nError is there in opening buffer_value\n");
-    return -1;
-  }
-  //pushing
-  ret_ioctl = ioctl(buffer_value, I2C_SLAVE, addrabc);
-  //check if return of ioctl is valid or not
-  if (ret_ioctl< 0)
-  {
-    printf("\nError is there\n");
-    return -1;
-  }
-
- }
-
-int main()
-{
-//  write_high_register(0x02,0x1234);
-  //int val=read_high_register(0x02);
-//  write_config_reg_on_off(1);
-  //write_config_reg_on_off1(1);
-   temp_sensor_init();
-   //write_config_reg_on_off1(0xA061);
-   //read_high_register_onoff();
-  // write_high_register(0x01,0xA1FF);
-//
-//  read_high_register(0x01);
-//write_config_reg(0xA061);
-//read_config_reg();
-
-//78A0 for fault bits
-//61A0 for SD mode
-//configuration_register_fault_bits(0x01,0x60e0);
-//configuration_register_read_faults_bits(0x01);
-//write_high_register(0x03, 0xA060);
-//read_high_register(0x03);
-configuration_register_EM_bits(0x01,0x0040);
-configuration_register_read_EM(0x01);
- final_read_temperature(0);
 }

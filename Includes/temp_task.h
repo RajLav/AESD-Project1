@@ -1,4 +1,3 @@
-
 /*
 *@File:temp_task.h
 *@Description_File: Header File for Temperature Sensor
@@ -24,12 +23,18 @@
 #define SM_MODE_ON        0x6180
 #define Fault_Bits_Read        0x7880
 #define EM_Mode_ON        0x6090
-#define EM_Mode_OFF    0x6080
 #define CR_MODE_ON        0x6040
 #define Retry_Mode_ON			10
 #define Temp_No_Retry					0
 #define data_register_read			0x00
 
+
+//Variables Defined
+
+sig_atomic_t flag;
+uint8_t LogKillSafe,AliveThreads,IF_RETRY,Present_Temp_Sensor_Output;
+
+int File_Descriptor;
 
 //Function Prototypes
 uint8_t base_reg_write(uint8_t* buffer_value,int buffer_bytes);
@@ -46,5 +51,3 @@ uint8_t config_register_temperature(void);
 uint8_t get_temp(float *t_data);
 uint8_t temp_initial_sensor(void);
 uint8_t BIST_Temp_Check(void);
-
-
