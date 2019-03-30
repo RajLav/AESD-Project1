@@ -22,7 +22,6 @@
 #define Configuration_Register_Default_1        0x6080
 #define Configuration_Register_Default_2        0x60A0
 #define SM_MODE_ON        0x6180
-#define SM_MODE_OFF        0x6080
 #define Fault_Bits_Read        0x7880
 #define EM_Mode_ON        0x6090
 #define EM_Mode_OFF    0x6080
