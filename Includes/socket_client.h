@@ -2,7 +2,7 @@
 *@File:socket_client.h
 *@Description_File: Header File for socket client Sensor
 *@Author:Raj Lavingia and Yash Gupte
-*@Date: 03/28/2018
+*@Date: 03/26/2018
 */
 
 
@@ -13,25 +13,26 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <netdb.h>
+#include <time.h>
+#include <stdint.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <pthread.h>
 #include <signal.h>
 #include <sys/time.h>
 #include <sys/syscall.h>
-#include <netdb.h>
-#include <time.h>
 #include <stdint.h>
 #include <malloc.h>
 #include <arpa/inet.h>
-#include <stdint.h>
-#include <sys/types.h>
 
 //Structures used for time
 struct timespec timespec_struct;
 struct timeval current_time;
 
 //Port Defined for connection between client and server
-#define PORT 8007
+#define PORT 8009
+
 
 //Temperature in specific unit
 #define tempc 25
@@ -50,3 +51,7 @@ struct timeval current_time;
 //Status of Temp or Lux by changing this particular Flag
 #define Temperature_Status			1
 #define Lux_Status				2
+
+
+int socket_fd, info_in, info_out;
+struct sockaddr_in client;
