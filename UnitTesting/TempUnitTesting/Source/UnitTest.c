@@ -130,4 +130,37 @@ uint8_t all_registers_check(void)
         return 0;
 }
 
+uint8_t final_read_temperature(int temperature_unit,int MSB,int LSB,float calculated)
+{
+    int c = ((MSB << 8) | LSB) >> 4; 
+    float temp;
+    switch(temperature_unit)
+    {
+      case celsius:
+        temp = c*0.0625;
+        if(temp == calculated)
+        return Success;
+      return Error;
+        break;
 
+      case fehrenheit:
+        temp = (1.8 * c) + 32;
+        if(temp == calculated)
+        return Success;
+      return Error;
+        break;
+
+      case kelvin:
+         temp = c + 273.15;
+         if(temp == calculated)
+        return Success;
+      return Error;
+        break;
+
+        default: return TempNotInUnits;
+        break;
+    }
+
+   
+    
+}

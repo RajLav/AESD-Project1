@@ -28,5 +28,6 @@ int ret_write_lower_register; //return for write lower reg
 int temp3;
 unsigned char MSB, LSB;
 
-typedef enum{Success=0,Error=1,AddressError=2,AllocError=3,TempNotInUnits=4}ErrorCodes;
-char* ErrorStates[]={"Success\n","Error\n","Address Error\n","Allocation Error\n","Temperature Unit Error\n"};
+typedef enum{Success=0,Error=1,AddressError=2,AllocError=3,TempNotInUnits=4,TempNotMatch=5}ErrorCodes;
+char* ErrorStates[]={"Success\n","Error\n","Address Error\n","Allocation Error\n","Temperature Unit Error\n","Temperature Not Matching\n"};
+uint8_t final_read_temperature(int temperature_unit,int MSB,int LSB,float calculated);
