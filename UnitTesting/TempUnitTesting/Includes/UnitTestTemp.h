@@ -1,5 +1,3 @@
-
-//Libraries inclided
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
@@ -32,4 +30,3 @@ unsigned char MSB, LSB;
 
 typedef enum{Success=0,Error=1,AddressError=2,AllocError=3,TempNotInUnits=4}ErrorCodes;
 char* ErrorStates[]={"Success\n","Error\n","Address Error\n","Allocation Error\n","Temperature Unit Error\n"};
-
