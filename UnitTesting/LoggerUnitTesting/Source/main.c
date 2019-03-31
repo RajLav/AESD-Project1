@@ -1,6 +1,10 @@
 #include "UnitTestLog.c"
+ #include "../Includes/main.h"
+ #include "../Includes/LoggingThread.h"
+ #include "LoggingThread.c"
 
 int pass,fail;
+char* path = "LOG_FILE";
 
 int main(void)
 {
@@ -10,41 +14,27 @@ int main(void)
   	printf("\t\t||   Logger Unit Testing        ||\n");
   	printf("\t\t==================================\n");
 
-	// Proper => exepcted error 0
-	InitializeStruct(MAIN_TASK,VALUE,TaskArray[MAIN_TASK],23);
-	printf("Error:%d::%s\n",logger_task(fptr,TaskArray[MAIN_TASK],23),ErrorStates[logger_task(fptr,TaskArray[MAIN_TASK],23)]);
-	if(logger_task(fptr,TaskArray[MAIN_TASK],23))pass+=1;
+  	//printf(log_init(fptr);
+  	printf("Error:%d::%s\n",log_init(path),ErrorStates[log_init(path)]);
+	if(log_init(path))fail+=1;
 	else pass+=1;
 
-	// NULL Pointer =>expected error 1
-	InitializeStruct(MAIN_TASK,VALUE,TaskArray[MAIN_TASK],23);
-	printf("Error:%d::%s\n",logger_task(NULL,TaskArray[MAIN_TASK],23),ErrorStates[logger_task(NULL,TaskArray[MAIN_TASK],23)]);
-	if(logger_task(NULL,TaskArray[MAIN_TASK],23))pass+=1;
+	// Proper => exepcted error 0
+	 InitializeStruct(Main,Logging,"check","check2");
+	 printf("Error:%d::%s\n",log_file(path,&STRUCT),ErrorStates[log_file(path,&STRUCT)]);
+	 if(log_file(path,&STRUCT))fail+=1;
+	 else pass+=1;
+
+	 /*** ERROR CASES ***/
+
+	 printf("Error:%d::%s\n",log_init(NULL),ErrorStates[log_init(NULL)]);
+	if(log_init(NULL))pass+=1;
 	else fail+=1;
 
-	// String is invalid =>expected error 2
-	InitializeStruct(MAIN_TASK,VALUE,TaskArray[MAIN_TASK],23);
-	printf("Error:%d::%s\n",logger_task(fptr,"Invalid String",23),ErrorStates[logger_task(fptr,"Invalid String",23)]);
-	if(logger_task(fptr,"Invalid String",23))pass+=1;
-	else fail+=1;
-
-	// Value is invalid =>expected error 3
-	InitializeStruct(LIGHT_TASK,VALUE,TaskArray[MAIN_TASK],23);
-	printf("Error:%d::%s\n",logger_task(fptr,TaskArray[MAIN_TASK],404),ErrorStates[logger_task(fptr,TaskArray[MAIN_TASK],404)]);
-	if(logger_task(fptr,TaskArray[MAIN_TASK],404))pass+=1;
-	else fail+=1;
-
-	// Value is invalid =>expected error 4
-	InitializeStruct(LIGHT_TASK,VALUE+2,TaskArray[MAIN_TASK],23);
-	printf("Error:%d::%s\n",logger_task(fptr,TaskArray[MAIN_TASK],23),ErrorStates[logger_task(fptr,TaskArray[MAIN_TASK],23)]);
-	if(logger_task(fptr,TaskArray[MAIN_TASK],23))pass+=1;
-	else fail+=1;
-
-	// Task is invalid =>expected error 5
-	InitializeStruct(LIGHT_TASK+3,VALUE,TaskArray[MAIN_TASK],23);
-	printf("Error:%d::%s\n",logger_task(fptr,TaskArray[MAIN_TASK],23),ErrorStates[logger_task(fptr,TaskArray[MAIN_TASK],23)]);
-	if(logger_task(fptr,TaskArray[MAIN_TASK],23))pass+=1;
-	else fail+=1;
+	 InitializeStruct(Main,Logging,"check","check2");
+	 printf("Error:%d::%s\n",log_file(NULL,&STRUCT),ErrorStates[log_file(NULL,&STRUCT)]);
+	 if(log_file(NULL,&STRUCT))pass+=1;
+	 else fail+=1;
 
 	printf("-------------------------------------------------------------------------\n");
   	printf("Total Test Cases:  %d || Passed Test Cases:  %d || Failed Test Cases:  %d\n",(pass+fail),pass,fail);
