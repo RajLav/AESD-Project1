@@ -4,7 +4,8 @@
 *@Author:Raj Lavingia and Yash Gupte
 *@Date: 03/26/2018
 */
-
+#ifndef SOCKET_CLIENT_H_
+#define SOCKET_CLIENT_H_
 
 //Includes are seperate because main.h cant be included for socket client
 #include <stdio.h>
@@ -31,27 +32,39 @@ struct timespec timespec_struct;
 struct timeval current_time;
 
 //Port Defined for connection between client and server
-#define PORT 8009
-
-
-//Temperature in specific unit
-#define tempc 25
-#define temf  75
-#define tempk 300
+#define PORT (8009)
 
 //Check if temperatures status is what
-#define Temperature_OK					0x00
-#define Temperature_HIGH		0x01
-#define Temperature_LOW		0x02
+#define Temperature_OK			(0)
+#define Temperature_HIGH		(1)
+#define Temperature_LOW			(2)
 
 //Check lights statsu
-#define Night_Time			0x01
-#define Day_Time				0x02
+#define Night_Time				(1)
+#define Day_Time				(2)
 
 //Status of Temp or Lux by changing this particular Flag
-#define Temperature_Status			1
-#define Lux_Status				2
+#define Temperature_Status			(1)
+#define Lux_Status					(2)
 
-
-int socket_fd, info_in, info_out;
+// Variables
+int socket_fd, MEASURED_IN, MEASURED_OUT;
 struct sockaddr_in client;
+
+
+typedef enum{gpio53=0,gpio54=1,gpio55=2,gpio56=3}PINS;
+
+
+/********************** Array defines *****************************/
+char* LED_Dir_Path[]={"/sys/class/gpio/gpio53/direction",
+					  "/sys/class/gpio/gpio54/direction",
+					  "/sys/class/gpio/gpio55/direction",
+					  "/sys/class/gpio/gpio56/direction"};
+
+char* LED_Val_Path[]={"/sys/class/gpio/gpio53/value",
+					  "/sys/class/gpio/gpio54/value",
+					  "/sys/class/gpio/gpio55/value",
+					  "/sys/class/gpio/gpio56/value"};
+
+
+#endif

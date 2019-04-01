@@ -36,7 +36,7 @@ uint8_t Server_initialisation(void)
 		}
 
 		//Listen to multiple clients at the same time
-		if(listen(socket_fd, 6) < 0)
+		if(listen(socket_fd, 5) < 0)
 		{
 			printf("Listening Failed\n");
 			exit (1);

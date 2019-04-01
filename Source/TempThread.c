@@ -362,9 +362,9 @@ uint8_t BIST_Temp_Check(void)
       Sent_Queue(Temp, Logging, "INFO", "\nReset Successfully\n");
     }
 
-		pthread_mutex_unlock(&lock);
+		 pthread_mutex_unlock(&lock);
      printf("[INFO]Normal function\n");
-		
+	 	
     return 0;
 
 }
