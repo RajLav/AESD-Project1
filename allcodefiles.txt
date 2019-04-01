@@ -1,0 +1,3870 @@
+#include "main.h"
+
+typedef enum{gpio53=0,gpio54=1,gpio55=2,gpio56=3}PINS;
+
+char* LED_Dir_Path[]={"/sys/class/gpio/gpio53/direction",
+					  "/sys/class/gpio/gpio54/direction",
+					  "/sys/class/gpio/gpio55/direction",
+					  "/sys/class/gpio/gpio56/direction"};
+
+char* LED_Val_Path[]={"/sys/class/gpio/gpio53/value",
+					  "/sys/class/gpio/gpio54/value",
+					  "/sys/class/gpio/gpio55/value",
+					  "/sys/class/gpio/gpio56/value"};
+/*
+*@File:LoggingThread.h
+*@Description_File: Header File for main functionLog Thread
+*@Author:Raj Lavingia and Yash Gupte
+*@Date: 03/23/2018
+*/
+
+#ifndef LOGGINGTHREAD_H_
+#define LOGGINGTHREAD_H_
+
+#include "main.h"
+#include "LoggingThread.h"
+
+pthread_mutex_t lock;
+
+sig_atomic_t flag;
+uint8_t LogKillSafe;
+uint8_t RunningThreads;
+
+void * Log_Queue_Thread(void * args);
+
+char* ThreadString[]={" ","Main","Logging","Socket","Temperature","Lux","Unknown"};
+
+/* This function Opens the file with specified name or uses default value if not defined.
+   Successful opening result in Success log. Else Error message is logged*/
+uint8_t log_init(char* user_path);
+
+/* Logs the particular thread in the source description with time stamp and
+   even the destination description with time stamp.*/
+uint8_t log_file(char* user_path, ThreadStruct* StringToSend);
+
+#endif
+/*
+*@File:LuxThread.h
+*@Description_File: Header File for Light Sensor
+*@Author:Raj Lavingia and Yash Gupte
+*@Date: 03/26/2018
+*/
+
+#include "main.h"
+
+// Address of light sensor
+
+#define Retry_Score			10
+
+
+// Internal register addresses
+#define Control_Register_Address						0x00
+#define Timing_Register_Address						0x01
+#define Interrupt_Control_register					0x06
+#define Read_Register_ID							0x0A
+
+#define Data0_Lower_Bits						0x0C
+#define Data0_Higher_Bits						0x0D
+#define Data1_Lower_Bits						0x0E
+#define Data1_Higher_Bits						0x0F
+#define Lux_Data0_Low						0x0C
+#define Lux_Data0_High					0x0D
+#define Lux_Data1_Low						0x0E
+#define Lux_Data1_High					0x0F
+
+#define THresholdLOW					0x02
+#define THresholdLOWHIGH					0x03
+#define THresholdHIGHLOW					0x04
+#define THresholdHIGHHIGH				0x05
+#define Control_Register_start			0x03
+#define Interrupt_Register_Control			0x1F
+
+// Defines and macros for using command register with high flexibility
+
+#define Word_Command_Reg(x)		((x & 0X0F) | 0XA0)
+
+
+#define Lux_Low_Integration_Time		(0)		// 13.7ms
+#define Lux_Med_Integration_Time		(1)		// 101ms
+#define Lux_High_Integration_Time		(2)		// 402ms
+
+#define Lux_Set_Gain_High(x)				x |	0X10
+
+//Variables declared
+int File_Descripter_LUX;
+sig_atomic_t flag;
+uint8_t LogKillSafe,RunningThreads,Lux_Error_Retry,LUX_SENSOR_ST;
+
+//Function Prototypes
+uint8_t lux_common_write(uint8_t* buffedesired_value,int buffer_bytes);
+uint8_t lux_common_read(uint8_t *buffedesired_value,int buffer_bytes);
+uint8_t write_pointer(uint8_t* x);
+uint8_t lux_read_reg(uint8_t* x,uint8_t bytes);
+uint8_t lux_write_reg1(uint8_t* x,uint8_t bytes);
+uint8_t lux_write_reg(uint8_t* x);
+uint8_t lux_write_register(uint8_t register_addr, uint8_t desired_val);
+uint8_t lux_read_register(uint8_t register_addr, uint8_t* desired_val);
+uint8_t custom_test_lux_config(void);
+uint8_t get_lux(float *lux_final_value);
+uint8_t day_night(float *tem);
+uint8_t lux_initial_sensor(void);
+uint8_t LuxThread_Init(void);
+/*
+*@File:main.h
+*@Description_File: Header File for main function
+*@Author:Raj Lavingia
+*@Date: 03/23/2018
+*/
+
+/*Inclusion of Libraries for main.c*/
+#ifndef MAIN_H_
+#define MAIN_H_
+
+#include <stdio.h>
+#include <math.h>
+#include <float.h>
+#include <complex.h>
+#include <time.h>
+#include <mqueue.h>
+#include <unistd.h>
+#include <string.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <linux/i2c-dev.h>
+#include <assert.h>
+#include <errno.h>
+#include <signal.h>
+#include <malloc.h>
+#include <stdbool.h>
+
+
+/************** Global Variables *********************/
+extern pthread_mutex_t lock, lock_var;
+extern uint8_t IF_RETRY;
+extern uint8_t IF_RETRY_LUX;
+extern uint8_t TEMP_SENSOR_ST;
+extern uint8_t LUX_SENSOR_ST;
+extern uint8_t TEMP_WARN;
+extern uint8_t LUX_WARN;
+extern uint8_t SOCK_ST;
+extern uint8_t Counter;
+extern sig_atomic_t flag;
+extern uint8_t LogKillSafe;
+extern uint8_t RunningThreads; 
+
+/************** Global Defines *********************/
+#define SOCK_ON 			(1)
+#define SOCK_OFF 			(0)
+
+
+#define Temp_Sig 			(0XF0)
+#define Lux_Sig 			(0xF1)
+
+#define Celsius				(1)
+#define Fahrenheit			(2)
+#define Kelvin				(3)
+
+#define SENSOR_ON 			(1)
+#define SENSOR_OFF 			(0)
+
+#define TimerInterval		(250)
+#define RetryPeriod			(5000)
+#define CountThresh		(RetryPeriod / TimerInterval)
+
+#define Alive_Testing_Interval		(2)
+
+#define I2C_BUS			(char *)"/dev/i2c-2"
+#define DEBUG_PRINTF 		(1)
+
+#define MSG_STRING  				"Unknown Thread!"
+
+
+#define LOG_LINUX					(0X01)
+#define LINUX_LOG					(0x02)
+#define TERMINAL_LOG    			(0x03)
+
+
+#define LOGGING_ALIVE 				(0b00000001)
+#define SOCKET_ALIVE 				(0b00000010)
+#define TEMP_ALIVE 					(0b00000100)
+#define LUX_ALIVE 					(0b00001000)
+
+
+#define Temperature_Signal			(0xF0)
+#define Lux_Signal					(0xF1)
+
+#define Celsius						(1)
+#define Fahrenheit					(2)
+#define Kelvin						(3)
+
+#define PORT 						(8009)
+
+#define time_high 					(0x02)
+#define time_med 					(0x01)
+#define time_low 					(0x00)
+
+#define gain 						(0x10)
+
+
+/********************** Enum defines ****************************/
+typedef enum
+{
+	Main = 1,Logging = 2,Socket = 3,Temp = 4,Lux =5
+} Sources;
+
+typedef struct Pthread_ArgsStruct
+{
+    char LogFile_Path[100];
+}Pthread_ArgsStruct;
+
+typedef struct ThreadStruct
+{
+	uint8_t Source;
+	uint8_t Dest;
+	char LogLevel[150];
+	char Msg[150];
+} ThreadStruct;
+
+typedef enum{
+	MAIN_QUEUE_E=0,
+	LOGGING_QUEUE_E=1,
+	SOCKET_QUEUE_E=2,
+	TEMP_QUEUE_E=3,
+	LUX_QUEUE_E=4
+}QUEUE_ENUM;
+
+typedef enum{gpio53=0,gpio54=1,gpio55=2,gpio56=3}PINS;
+
+
+/********************** Array defines *****************************/
+char* LED_Dir_Path[]={"/sys/class/gpio/gpio53/direction",
+					  "/sys/class/gpio/gpio54/direction",
+					  "/sys/class/gpio/gpio55/direction",
+					  "/sys/class/gpio/gpio56/direction"};
+
+char* LED_Val_Path[]={"/sys/class/gpio/gpio53/value",
+					  "/sys/class/gpio/gpio54/value",
+					  "/sys/class/gpio/gpio55/value",
+					  "/sys/class/gpio/gpio56/value"};
+
+char* QueueValues[]={"/my_queue_main_q","/my_queue_log_q","/my_queue_server_q","/my_queue_temp_q","/my_queue_lux_q"};
+char* SourceStrings[]={"Main Thread","Logging Thread","Socket Thread","Temp Thread","Lux Thread"};
+
+///********************** function prototypes *****************************/
+void SendToThreadQ(uint8_t Src, uint8_t Dst, char* Log, char* Message);
+void Log_error(uint8_t Src, char* Err_Msg, int errnum, uint8_t SendToLogging);
+void gpio_on_off(uint8_t pin,uint8_t state);
+
+double GetTime();
+
+#endif
+/*
+*@File:LuxThread.c
+*@Description_File: Header file for Socket Server
+*@Author:Raj Lavingia and Yash Gupte
+*@Date: 03/29/2018
+*/
+#ifndef SOCKETTHREAD_H_
+#define SOCKETTHREAD_H_
+
+#include "main.h"
+#define TEMP_WARN_Req				(1)
+#define LUX_WARN_Req				(2)
+uint8_t TEMP_WARN;
+uint8_t LUX_WARN;
+uint8_t req_warning = 0;
+
+uint8_t SOCK_ST;
+
+
+typedef struct
+{
+  char string_written[150];
+  int num;
+}my_struct_to_be_passed;
+
+my_struct_to_be_passed data1, data2;
+my_struct_to_be_passed *p1 = &data1;
+my_struct_to_be_passed *p2 = &data2;
+
+
+int socket_fd, custom_socket, cust_sock, MEASURED_IN, MEASURED_OUT;
+char loglevel_sock[30], loglevel_q[30];
+
+pthread_mutex_t lock;
+
+sig_atomic_t flag;
+uint8_t LogKillSafe;
+uint8_t RunningThreads;
+
+void * SocketThread(void * args);
+uint8_t Server_initialisation(void);
+uint8_t Server_Killed_Externally(void);
+
+
+#endif
+/*
+*@File:socket_client.h
+*@Description_File: Header File for socket client Sensor
+*@Author:Raj Lavingia and Yash Gupte
+*@Date: 03/26/2018
+*/
+#ifndef SOCKET_CLIENT_H_
+#define SOCKET_CLIENT_H_
+
+//Includes are seperate because main.h cant be included for socket client
+#include <stdio.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <time.h>
+#include <stdint.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <pthread.h>
+#include <signal.h>
+#include <sys/time.h>
+#include <sys/syscall.h>
+#include <stdint.h>
+#include <malloc.h>
+#include <arpa/inet.h>
+
+//Structures used for time
+struct timespec timespec_struct;
+struct timeval current_time;
+
+//Port Defined for connection between client and server
+#define PORT (8009)
+
+//Check if temperatures status is what
+#define Temperature_OK			(0)
+#define Temperature_HIGH		(1)
+#define Temperature_LOW			(2)
+
+//Check lights statsu
+#define Night_Time				(1)
+#define Day_Time				(2)
+
+//Status of Temp or Lux by changing this particular Flag
+#define Temperature_Status			(1)
+#define Lux_Status					(2)
+
+// Variables
+int socket_fd, MEASURED_IN, MEASURED_OUT;
+struct sockaddr_in client;
+
+
+typedef enum{gpio53=0,gpio54=1,gpio55=2,gpio56=3}PINS;
+
+
+/********************** Array defines *****************************/
+char* LED_Dir_Path[]={"/sys/class/gpio/gpio53/direction",
+					  "/sys/class/gpio/gpio54/direction",
+					  "/sys/class/gpio/gpio55/direction",
+					  "/sys/class/gpio/gpio56/direction"};
+
+char* LED_Val_Path[]={"/sys/class/gpio/gpio53/value",
+					  "/sys/class/gpio/gpio54/value",
+					  "/sys/class/gpio/gpio55/value",
+					  "/sys/class/gpio/gpio56/value"};
+
+
+#endif
+/*
+*@File:temp_task.h
+*@Description_File: Header File for Temperature Sensor
+*@Author:Raj Lavingia and Yash Gupte
+*@Date: 03/23/2018
+*/
+
+//Includes
+#include "main.h"
+
+//Macros Defined
+#define Threshold_upper_Limit 		(30)
+#define Threshold_lower_Limit 		(10)
+#define Address_I2C        			(0x48)
+#define Base_Temperature    		(0x00)
+#define Above_Threshold        		(0x01)
+#define Below_Threshold        		(0x02)
+#define TLow_register            	(0x02)
+#define THigh_register        		(0x03)
+#define Base_Config_register        (0x01)
+#define Configuration_Register_Default_1        (0x6080)
+#define Configuration_Register_Default_2        (0x60A0)
+#define SM_MODE_ON        			(0x6180)
+#define Fault_Bits_Read        		(0x7880)
+#define EM_Mode_ON        			(0x6090)
+#define CR_MODE_ON        			(0x6040)
+#define Retry_Mode_ON				(10)
+#define Temp_No_Retry				(0)
+#define data_register_read			(0x00)
+
+
+//Variables Defined
+
+sig_atomic_t flag;
+uint8_t LogKillSafe,RunningThreads,IF_RETRY,Present_Temp_Sensor_Output;
+
+int File_Descriptor;
+
+//Function Prototypes
+uint8_t base_reg_write(uint8_t* buffer_value,int buffer_bytes);
+void * Temperature_Thread(void * args);
+uint8_t TempThread_Init(void);
+uint8_t base_reg_read(uint8_t *buffer_value,int buffer_bytes);
+uint8_t write_reg_ptr(uint8_t* x);
+uint8_t temp_read_reg(uint8_t* x);
+uint8_t temp_write_reg(uint8_t* x);
+uint8_t main_write_register(uint8_t register_addr, uint16_t desired_val);
+uint8_t main_read_register(uint8_t register_addr, uint8_t* desired_val);
+uint8_t all_registers_check(void);
+uint8_t config_register_temperature(void);
+uint8_t get_temp(float *t_data);
+uint8_t temp_initial_sensor(void);
+uint8_t BIST_Temp_Check(void);
+void bist();
+
+#include "gpio.h"
+
+void gpio_on_off(uint8_t pin,uint8_t state)
+{
+	FILE *fp1;
+
+	if(pin<4 && state<2)
+	{
+		fp1 = fopen(LED_Dir_Path[pin],"w");
+		if(fp1==NULL) printf("Error in led\n");
+		else
+		printf("\n Success file open");
+	}
+	else 
+	{
+		printf("\n Error in pin or state\n");
+		return 1;
+	}
+	
+	fseek(fp1,0,SEEK_SET);
+	fprintf(fp1,"%d",pin);
+	fseek(fp1,0,SEEK_SET);
+	fprintf(fp1,"%s","out");
+	fclose(fp1);
+
+	fp1 = 	fopen(LED_Val_Path[pin],"w");
+	if(fp1==NULL) printf("Error in led\n");
+	else
+	printf("\n Success file open");
+
+	fseek(fp1,0,SEEK_SET);
+	fprintf(fp1,"%d",state);
+
+	fclose(fp1);
+
+}/*
+*@File:LoggingThread.c
+*@Description_File: C File for main functionLog Thread
+*@Author:Raj Lavingia and Yash Gupte
+*@Date: 03/23/2018
+*/
+
+uint8_t log_init(char* user_path)
+{
+	FILE *file;
+	file = fopen(user_path, "w");
+
+	if(file == NULL)
+	{
+		printf("[ERROR]Error opening file! \n");
+		exit(1);
+	}
+
+	fprintf(file,"[%lf] [INFO_LOG]: Successfully created logfile! TID: %ld PID: %ld\n\n", GetCurrentTime(), syscall(SYS_gettid),syscall(SYS_getpid));
+	printf("[%lf] [INFO_LOG]: Successfully created logfile! TID: %ld PID: %ld\n\n", GetCurrentTime(), syscall(SYS_gettid),syscall(SYS_getpid));
+
+	fclose(file);
+	return 0;
+}
+
+
+uint8_t log_file(char* user_path, ThreadStruct* StringToSend)
+{
+	FILE *file;
+	file = fopen(user_path, "a");
+	if(file == NULL)
+	{
+		printf("[ERROR]File could not be opend\n");
+	}
+
+	char* SourceString;
+
+	if((StringToSend->Source)<6)
+		SourceString = ThreadString[StringToSend->Source];
+	else
+		SourceString = ThreadString[6];
+
+
+	char* line;
+	if((StringToSend->Dest)<6)
+	{
+		line = "[%lf][INFO] %s(%s): %s::		 Source: '%d'\n\n";
+		fprintf(file, line,GetCurrentTime(),ThreadString[StringToSend->Dest], StringToSend->LogLevel, StringToSend->Msg, StringToSend->Source);
+		printf(line, GetCurrentTime(),ThreadString[StringToSend->Dest], StringToSend->LogLevel, StringToSend->Msg, StringToSend->Source);
+	}
+	else
+	{
+		line = "[%lf][ERROR] %s(%s): %s::		 Source: '%d'\n\n";
+		fprintf(file, line,GetCurrentTime(),ThreadString[6],StringToSend->LogLevel, StringToSend->Msg,  StringToSend->Source);
+		printf(line, GetCurrentTime(),ThreadString[6], StringToSend->LogLevel, StringToSend->Msg,  StringToSend->Source);
+
+	}
+
+
+
+	fflush(file);
+	fclose(file);
+	return 0;
+}
+/*
+*@File:LuxThread.c
+*@Description_File: C File for Light Sensor
+*@Author:Raj Lavingia and Yash Gupte
+*@Date: 03/26/2018
+*/
+
+#include "LuxThread.h"
+#include "main.h"
+
+//pthread mutex lock used for locking unlocking of data
+pthread_mutex_t lock;
+
+uint8_t Lux_Warning = 0x02;
+
+//Function For Base register write
+uint8_t lux_common_write(uint8_t* buffedesired_value,int buffer_bytes)
+{
+  //Go and write to a particular location, store value in temp var
+    int lux=write(File_Descripter_LUX, buffedesired_value, buffer_bytes);
+    //Check if Lux is equla to bytes read or not
+    if(lux!=buffer_bytes)
+    {            //if not then return fail
+      Error_Data(Lux, "[ERROR]Bytes do not match!\n", errno, LOG_LINUX);
+      return 1;
+    }
+    else
+    {            //else return pass
+      return 0;
+    }
+}
+
+//Function for base register read
+uint8_t lux_common_read(uint8_t *buffedesired_value,int buffer_bytes)
+{      //Go and read from the particular location
+    int lux =read(File_Descripter_LUX, buffedesired_value, buffer_bytes);
+    //check if temp is equal to bytes read
+    if(lux!=buffer_bytes)
+    {            //if not then return fail
+      Error_Data(Lux, "[ERROR]Bytes do not match!\n", errno, LOG_LINUX);
+      return 1;
+    }
+    else
+    {            //if true, then write the value which is read and return pass
+			printf("[INFO]Read value is %d \n",*buffedesired_value);
+      return 0;
+    }
+}
+
+uint8_t write_pointer(uint8_t* x)
+{
+    int lux = lux_common_write(x,1);      //Check if the temp value is returned success by the base reg Write_Register_Pointer
+    //if not equal to 0 return fail
+    if(lux!=0)
+    {
+      Error_Data(Lux, "[ERROR]Retrun !=0 !\n", errno, LOG_LINUX);
+      return 1;
+    }
+    else
+    {
+      return 0;
+    }
+}
+
+//Lux read
+uint8_t lux_read_reg(uint8_t* x,uint8_t bytes)
+{
+    uint8_t lux = lux_common_read(x,bytes);
+    if(lux!=0)      //if equal to anything else then return 1
+    {
+       Error_Data(Lux, "[ERROR]Retrun !=0 !\n", errno, LOG_LINUX);
+      return 1;
+    }
+    else      //if equal to 0 then return success
+    {
+      return 0;
+    }
+}
+//While sending bytes in write send 3 bytyes, lower 8, higher 8 and base address
+uint8_t lux_write_reg1(uint8_t* x,uint8_t bytes)
+{
+   //if return not equal to 0 the return fail
+    int lux = lux_common_write(x,bytes);
+    if(lux!=0)
+    {
+      Error_Data(Lux, "[ERROR]Retrun !=0 !\n", errno, LOG_LINUX);
+      return 1;
+    }
+    else
+    {            //if equal to 0 then return success
+      return 0;
+    }
+
+}
+//While sending bytes in write send 3 bytyes, lower 8, higher 8 and base address
+uint8_t lux_write_reg(uint8_t* x)
+{
+       //if return not equal to 0 the return fail
+    int lux = lux_common_write(x,1);
+    if(lux!=0)
+    {
+      Error_Data(Lux, "[ERROR]Retrun !=0 !\n", errno, LOG_LINUX);
+      return 1;
+    }
+    else
+    {            //if equal to 0 then return success
+      return 0;
+    }
+
+}
+
+//Common Custom function for all registers check for writing data to register
+uint8_t lux_write_register(uint8_t register_addr, uint8_t desired_val)
+{
+		uint8_t lux_data_write = 0;
+    int a = 1;
+		lux_data_write = Word_Command_Reg(register_addr);
+    //Defined Register Address
+    int temp = ((register_addr ==0x07) || (register_addr == 0x08) || (register_addr == 0x09) || (register_addr == 0x0B));
+    if(temp)
+    {
+			printf("[Error_Lux]Register Address wrong\n");
+			Error_Data(Lux, "[ERROR]Register Address wrong!\n", errno, LOG_LINUX);
+			return 1;
+		}
+    //writing to specific register
+		if(lux_write_reg(&lux_data_write))
+		{
+			printf("[ERROR]Lux Write Fail\n");
+			Error_Data(Lux, "[ERROR]RRegister Address wrong!\n", errno, LOG_LINUX);
+			return 1;
+		}
+    //Writing value to that specific register
+		if(lux_write_reg1(&desired_val,a))
+		{
+				Error_Data(Lux, "[ERROR]Desired Value writing failed\n", errno, LOG_LINUX);
+				return 1;
+		}
+		return 0;
+}
+
+//Common fucntion for reading register values
+uint8_t lux_read_register(uint8_t register_addr, uint8_t* desired_val)
+{
+  uint8_t lux_data_write = 0;
+	lux_data_write = Word_Command_Reg(register_addr);
+  if(lux_write_reg(&lux_data_write))
+    {
+      printf("[ERROR]Checking address failed where written", errno, LOG_LINUX);
+      Error_Data(Lux, "[ERROR]Checking address failed where written\n", errno, LOG_LINUX);
+      return 1;
+    }
+  //reading value from the register written above
+  if(lux_read_reg(desired_val,1))
+    {
+      Error_Data(Lux, "[ERROR]Lux Value read failed\n", errno, LOG_LINUX);
+      return 1;
+    }
+      return 0;
+}
+
+
+uint8_t custom_test_lux_config(void)
+{
+    uint8_t read_value_stored;
+		char Text_In_Log_File[220];
+
+    //Base register control, 0x03
+		if(lux_write_register(Control_Register_Address, Control_Register_start))
+		{
+    	printf("[Error_Lux]Control register Write Failed\n");
+			return 1;
+		}
+
+    //Control Register reads 0x03, if not control register failed to start and lux cant be taken
+		if(lux_read_register(Control_Register_Address, &read_value_stored))
+		{
+				Error_Data(Lux, "[ERROR]Control register 0x03 failed to read", ENOMSG, LOG_LINUX);
+				return 1;
+		}
+
+    Sent_Queue(Lux, Logging, "[INFO]", "Control Register Success\n");
+
+    //Function to set gain high and integration time in timing register
+		if(lux_write_register(Timing_Register_Address, Lux_Set_Gain_High(2)))
+		{
+				printf("[Error_Lux]Gain not set\n");
+				return 1;
+		}
+		// Reading back Timing Register for specific gain and time
+		if(lux_read_register(Timing_Register_Address, &read_value_stored))
+		{
+				Error_Data(Lux, "[ERROR]Read: Timing_Register_Address", ENOMSG, LOG_LINUX);
+				return 1;
+		}
+    Sent_Queue(Lux, Logging, "[INFO]", "Gain and Integration Time Success\n");
+
+    //Interrupt control register write functuon
+		if(lux_write_register(Interrupt_Control_register, Interrupt_Register_Control))
+		{
+				printf("[Error_Lux]Interrupt control register fail write\n");
+				return 1;
+		}
+
+		if(lux_read_register(Interrupt_Control_register, &read_value_stored))
+		{
+				Error_Data(Lux, "[ERROR]Interrupt register not read successfully", ENOMSG, LOG_LINUX);
+				return 1;
+		}
+    Sent_Queue(Lux, Logging, "[INFO]", "Interrupt Control Register Success\n");
+
+  		static uint8_t lux_data_write[2] = {0};
+  		lux_data_write[0] = Word_Command_Reg (THresholdLOW);
+  		if(lux_write_reg(&lux_data_write[0]))
+  		{
+  				printf("[Error_Lux]Tlow write address fail \n");
+  				return 1;
+  		}
+  		lux_data_write[0] = 0x05;
+  		lux_data_write[1] = 0x0A;
+  		if(lux_write_reg1(&lux_data_write[0], 2))
+  		{
+  				printf("[Error_Lux]Write desired value failed\n");
+  				return 1;
+  		}
+
+		lux_data_write[0] = Word_Command_Reg (THresholdLOW);
+		if(lux_write_reg(&lux_data_write[0]))
+		{
+        printf("[Error_Lux]Write desired value failed from read end\n");
+				return 1;
+		}
+		if(lux_read_reg(&lux_data_write[0], 2))
+		{
+				Error_Data(Lux, "[ERROR]Read Tlow Fail", errno, LOG_LINUX);
+				return 1;
+		}
+    Sent_Queue(Lux, Logging, "[INFO]", "\nInterrupt Threshold TLow Pass\n");
+
+		lux_data_write[0] = Word_Command_Reg (THresholdHIGHLOW);
+		if(lux_write_reg(&lux_data_write[0]))
+		{
+				printf("[Error_Lux]Error for write register for Thuigh\n");
+				return 1;
+		}
+		lux_data_write[0] = 0x0F;
+		lux_data_write[1] = 0xF0;
+		if(lux_write_reg1(&lux_data_write[0], 2))
+		{
+      printf("[Error_Lux]Error for write value for Thuigh\n");
+			return 1;
+		}
+		lux_data_write[0] = Word_Command_Reg (THresholdHIGHLOW);
+		if(lux_write_reg(&lux_data_write[0]))
+		{
+      printf("[Error_Lux]Error for write register for Thuigh from read end\n");
+			return 1;
+		}
+		if(lux_read_reg(&lux_data_write[0], 2))
+		{
+				Error_Data(Lux, "[ERROR]Thigh read failed", errno, LOG_LINUX);
+				return 1;
+		}
+    Sent_Queue(Lux, Logging, "INFO", "\nInterrupt Threshold THigh Pass\n");
+
+    //Read read register
+		if(lux_read_register(Read_Register_ID, &read_value_stored))
+		{
+				Error_Data(Lux, "[ERROR]Reading failed from register\n", ENOMSG, LOG_LINUX);
+				return 1;
+		}
+    Sent_Queue(Lux, Logging, "INFO", "\nID Register Test Succeeded\n");
+
+		return 0;
+}
+
+
+uint8_t get_lux(float *lux_final_value)
+{
+
+		float value_CH0 ,value_CH1,ratio= 0;
+	  uint8_t lux_data_write[2] = {0};
+
+    // Powering ON the Sensor by writing 0x03 to Control Register
+    if(lux_write_register(0x00, 0x03))
+    {
+        //Log_error(Lux, "Write: Lux_Control_Reg", ENOMSG, LOGGING_AND_LOCAL);
+        return 1;
+    }
+
+    // Setting High Gain and High Integration Time
+    if(lux_write_register(0x01, Lux_Set_Gain_High(2)))
+    {
+        //Log_error(Lux, "Write: Lux_Timing_Reg", ENOMSG, LOGGING_AND_LOCAL);
+        return 1;
+    }
+    lux_data_write[0] = Word_Command_Reg (Data0_Lower_Bits);
+    int temp4 = (lux_write_reg(&lux_data_write[0]));
+    if(temp4)
+  	{
+  		printf("Data 0 Not written\n");
+  		return 1;
+    }
+    temp4 = (lux_read_reg(&lux_data_write[0], 2));
+    if(temp4)
+    {
+    	Error_Data(Lux, "Data 0 not read", errno, LOG_LINUX);
+    	return 1;
+    }
+    value_CH0 = (float)((lux_data_write[1] << 8) | lux_data_write[0]);
+
+		lux_data_write[0] = Word_Command_Reg (Data1_Lower_Bits);
+		if(lux_write_reg(&lux_data_write[0]))
+  	{
+      printf("Data 1 Not written\n");
+    	return 1;
+  	}
+    if(lux_read_reg(&lux_data_write[0], 2))
+    {
+      Error_Data(Lux, "Data 1 not read", errno, LOG_LINUX);
+    	return 1;
+    }
+
+		value_CH1 = (float)((lux_data_write[1] << 8) | lux_data_write[0]);
+
+		ratio = (value_CH1 / value_CH0);
+    printf(" ratio %f %f \n",value_CH1, value_CH0);
+
+    //Whole calculation is from datasheet
+		if((ratio > 0) && (ratio <= 0.5))
+    {
+      *lux_final_value = (0.0304 * value_CH0) - (0.062 * value_CH0 * pow(ratio, 1.4));
+    }
+
+		else if((ratio > 0.5) && (ratio <= 0.61))
+    {
+      *lux_final_value = (0.0224 * value_CH0) - (0.031 * value_CH1);
+    }
+
+		else if((ratio > 0.61) && (ratio <= 0.80))
+    {
+      *lux_final_value = (0.0128 * value_CH0) - (0.0153 * value_CH1);
+    }
+    else if((ratio > 0.80) && (ratio <= 1.30))
+    {
+      *lux_final_value = (0.00146 * value_CH0) - (0.00112 * value_CH1);
+    }
+		else
+    {
+      *lux_final_value = 0;
+    }
+    printf(" lux value is %f \n",*lux_final_value);
+				if(*lux_final_value <= 100)
+    {
+      printf("inside Day loop ************************\n");
+      LUX_WARN = 1;
+    }
+		else
+    {
+      printf("inside Day loop2 ************************\n");
+
+      LUX_WARN = 2;
+
+    }
+    return 0;
+
+}
+
+
+uint8_t lux_initial_sensor(void)
+{
+    //Open I2C bus for Lux Sensor
+		File_Descripter_LUX = open(I2C_BUS, O_RDWR);
+		if(File_Descripter_LUX == -1)
+		{
+				Error_Data(Lux, "[ERROR]open(): I2C Bus", errno, LOG_LINUX);
+				return 1;
+		}
+    //ioctl is used for multiple buses connected
+		if(ioctl(File_Descripter_LUX, I2C_SLAVE, 0x39) == -1)
+		{
+				Error_Data(Lux, "[ERROR]ioctl(): I2C Bus", errno, LOG_LINUX);
+				return 1;
+		}
+		return 0;
+}
+
+uint8_t LuxThread_Init(void)
+{
+		char Text[60];
+
+		sprintf(Text, "[INFO]Lux Thread successfully created with TID: %ld", syscall(SYS_gettid));
+		Sent_Queue(Lux, Logging, "[INFO]", Text);
+    sprintf(Text, "[INFO]Lux Thread with PID: %ld", syscall(SYS_getpid));
+    Sent_Queue(Lux, Logging, "[INFO]", Text);
+		pthread_mutex_lock(&lock);
+
+		if(lux_initial_sensor() != 0)
+    {
+      printf("[INFO]Lux not initialised properly");
+      Error_Data(Lux, "[Lux_Error]Not initialised lux sensor", ENOMSG, LOG_LINUX);
+      pthread_mutex_unlock(&lock);
+      return 1;
+    }
+    else
+		{
+      printf("[INFO]Lux Sensor ON\n");
+      Sent_Queue(Lux, Logging, "[INFO]", "\nLux Sensor Initiliazed Successfully\n");
+	  }
+
+		if(custom_test_lux_config() != 0)
+    {
+      printf("\n[INFO]BIST not proper");
+      Error_Data(Lux, "[Error_Lux]BIST Not Proper Initialised", ENOMSG, LOG_LINUX);
+      pthread_mutex_unlock(&lock);
+      return 1;
+    }
+
+		else
+		{
+      printf("[INFO]Bist is proper for LUX\n");
+      Sent_Queue(Lux, Logging, "[INFO]", "Lux Sensor BST Pass\n");
+		}
+
+		pthread_mutex_unlock(&lock);
+		Sent_Queue(Lux, Logging, "[INFO]", "Normal Lux Queue started\n");
+
+		return 0;
+}
+/*Name : Raj Lavingia and Yash Gupte
+Credits : Nikhil Divekar, POorn Mehta, Akash, Khalid Awadhi
+Date : 03/31/2019
+*/
+#include "main.h"
+
+/* Our includes */
+
+#include "LoggingThread.h"
+#include "SocketThread.h"
+#include "TempThread.h"
+#include "LuxThread.h"
+#include "POSIX_Qs.c"
+#include "LoggingThread.c"
+#include "SocketThread.c"
+#include "TempThread.c"
+#include "LuxThread.c"
+#include <sys/time.h>
+#include <stdio.h>
+
+/* Global Variables */
+pthread_t Log_pThread, Socket_pThread, Temp_pThread, Lux_pThread;
+
+pthread_mutex_t lock, lock_var;
+sig_atomic_t flag = 0;
+uint8_t sync_lux_temp = 0;
+uint8_t LogKillSafe = 3;
+uint8_t RunningThreads = 0x00;
+
+uint8_t Counter = 0;
+uint8_t IF_RETRY = 0;
+uint8_t IF_RETRY_LUX = 0;
+uint8_t TEMP_SENSOR_ST = SENSOR_OFF;
+uint8_t LUX_SENSOR_ST = SENSOR_OFF;
+
+uint8_t SOCK_ST = SOCK_OFF;
+
+double GetTime()
+{
+	struct timeval time;
+
+	gettimeofday(&time, 0);
+
+	return (double)(time.tv_sec)+(((double)(time.tv_usec))/1000000);
+}
+
+/* References :  Poorna Mehta */
+
+uint8_t Server_Killed_Externally(void)
+{
+
+    typedef struct
+    {
+      char str[150];
+      int num;
+    }t_strct;
+
+    t_strct t_strct1;
+    t_strct *pt_strct1 = &t_strct1;
+
+    strcpy(pt_strct1->str, "external");
+    pt_strct1->num = 1;
+
+    int temp_sock, t_out;
+    struct sockaddr_in t_client;
+    temp_sock = socket(AF_INET, SOCK_STREAM, 0);
+    if(temp_sock < 0)
+    {
+        return 1;
+    }
+
+    t_client.sin_family = AF_INET;
+
+    if(inet_pton(AF_INET, "127.0.0.1", &t_client.sin_addr)<=0)
+    {
+			return 1;
+    }
+
+    t_client.sin_port = htons(PORT);
+
+    if(connect(temp_sock, (struct sockaddr *)&t_client, sizeof(t_client)) < 0)
+    {
+      return 1;
+    }
+
+    t_out = write(temp_sock,pt_strct1,sizeof(t_strct));
+    if (t_out < 0)
+    {
+    return 1;
+    }
+
+    return 0;
+}
+
+void gpio_on_off(uint8_t pin,uint8_t state)
+{
+	FILE *fp1;
+
+	if(pin<4 && state<2)
+	{
+		fp1 = fopen(LED_Dir_Path[pin],"w");
+		if(fp1==NULL) printf("Error in led\n");
+		else
+		printf("\n Success file open");
+	}
+	else
+	{
+		printf("\n Error in pin or state\n");
+		return ;
+	}
+
+	fseek(fp1,0,SEEK_SET);
+	fprintf(fp1,"%d",pin);
+	fseek(fp1,0,SEEK_SET);
+	fprintf(fp1,"%s","out");
+	fclose(fp1);
+
+	fp1 = 	fopen(LED_Val_Path[pin],"w");
+	if(fp1==NULL) printf("Error in led\n");
+	else
+	printf("\n Success file open");
+
+	fseek(fp1,0,SEEK_SET);
+	fprintf(fp1,"%d",state);
+
+	fclose(fp1);
+
+}
+
+
+void signal_handler(int value)
+{
+	if(value == SIGVTALRM)
+	{
+			if(SOCK_ST == SOCK_ON)
+			{
+				RunningThreads |= SOCKET_ALIVE;
+			}
+			Counter += 1;
+			if(Counter == CountThresh)
+			{
+					Counter = 0;
+					if(IF_RETRY > 0)
+					{
+							IF_RETRY =IF_RETRY - 1;
+							if(close(File_Descriptor))
+							Sent_Queue(Main, Logging, "[INFO]", "\nRetrying for temperature\n");
+							if(temp_initial_sensor()) printf("Sensor not initialiased\n");
+							else
+							{
+								IF_RETRY = 0;
+								TEMP_SENSOR_ST = SOCK_ON;
+								Sent_Queue(Main, Logging, "[INFO]", "\nTemperature sensor is ON\n");
+							}
+					}
+
+					if(IF_RETRY_LUX > 0)
+					{
+							IF_RETRY_LUX -= 1;
+							if(close(File_Descripter_LUX))
+							Sent_Queue(Main, Logging, "[INFO]", "Retrying for Lux\n");
+							if(LuxThread_Init())	printf("Sensor not initialiased\n");
+							else
+							{
+								IF_RETRY_LUX = 0;
+								LUX_SENSOR_ST = SENSOR_ON;
+								Sent_Queue(Main, Logging, "INFO", "\nLux Sensor is ON Now\n");
+							}
+					}
+			}
+			if(sync_lux_temp == 0)
+			{
+				flag = Temp_Sig;
+				sync_lux_temp = 1;
+			}
+			else
+			{
+				flag = Lux_Sig;
+				sync_lux_temp = 0;
+			}
+	}
+	else
+	{
+			flag = value;
+			SOCK_ST = SOCK_OFF;
+			if(Server_Killed_Externally())        printf("\nSocket killing failed\n");
+	}
+}
+
+void timer_setup(void)
+{
+
+		struct sigaction sig_action_time;
+		struct itimerval sig_action_time_timer;
+
+		sig_action_time.sa_handler = &signal_handler;
+
+
+		sig_action_time_timer.it_interval.tv_sec = 0;
+		sig_action_time_timer.it_interval.tv_usec = 250000;
+
+
+		sig_action_time_timer.it_value.tv_sec = 2;
+		sig_action_time_timer.it_value.tv_usec = 0;
+
+
+		sigaction(SIGVTALRM, &sig_action_time, NULL);
+		sigaction(SIGUSR1, &sig_action_time, NULL);
+		sigaction(SIGUSR2, &sig_action_time, NULL);
+
+		setitimer(ITIMER_VIRTUAL, &sig_action_time_timer,NULL);
+}
+
+
+
+
+int main(void)
+{
+	struct Pthread_ArgsStruct args;
+
+	char LogFilePathUsr[100];
+
+	printf("Initiated ===> PID: %d\n\n", getpid());
+
+
+	sprintf(LogFilePathUsr, "./log.txt");
+
+	strcpy(args.LogFile_Path, LogFilePathUsr);
+	if( pthread_mutex_init(&lock, NULL) != 0 )
+	{
+		Error_Data(Main, "mutex init error", errno, TERMINAL_LOG);
+		return -1;
+	}
+
+	if( pthread_mutex_init(&lock_var, NULL) != 0 )
+	{
+		Error_Data(Main, "mutex init error", errno, TERMINAL_LOG);
+		return -1;
+	}
+
+
+	if(pthread_create(&Log_pThread, NULL, &Log_Queue_Thread, (void *)&args) != 0)
+	{
+		Error_Data(Main, "logging pthread error", errno, TERMINAL_LOG);
+	}
+	else
+	{
+		printf("[%lf] [MAIN]::Successfully created logging pthread!\n\n", GetTime());
+	}
+		sleep(2);
+	if(pthread_create(&Socket_pThread, NULL, &SocketThread, NULL) != 0)
+	{
+		Error_Data(Main, "Socket pthread error", errno, LOG_LINUX);
+	}
+	else
+	{
+		printf("[%lf] [MAIN]::Successfully created socket pthread!\n\n", GetTime());
+	}
+		sleep(2);
+
+	if(pthread_create(&Temp_pThread, NULL, &Temperature_Thread, NULL) != 0)
+	{
+		Error_Data(Main, "Temperature pthread error", errno, LOG_LINUX);
+	}
+	else
+	{
+		printf("[%lf] [MAIN]::Successfully created temperature pthread!\n\n", GetTime());
+	}
+		sleep(2);
+
+	if(pthread_create(&Lux_pThread, NULL, &LuxThread, NULL) != 0)
+	{
+		Error_Data(Main, "Lux pthread error", errno, LOG_LINUX);
+	}
+	else
+	{
+		printf("[%lf] [MAIN]::Successfully created lux pthread!\n\n", GetTime());
+	}
+	 sleep(2);
+
+		timer_setup();
+
+	while( RunningThreads != 0 )
+	{
+		printf("\n Running Threads==>\n");
+		uint8_t CurrentAlive = RunningThreads;
+		RunningThreads = 0;
+
+	printf("After lock\n");
+
+		if(CurrentAlive & LOGGING_ALIVE)
+		{
+			Sent_Queue(Main, Logging, "INFO", "Logging pThread is alive");
+			printf("[%lf] [MAIN]: Logging pThread is alive\n\n", GetTime());
+		}
+		else
+		{
+			Error_Data(Main, "Logging pThread dead", 42, TERMINAL_LOG);
+		}
+
+		if(CurrentAlive & SOCKET_ALIVE)
+		{
+			Sent_Queue(Main, Logging, "INFO", "Socket pThread is alive");
+			printf("[%lf] [MAIN]: Socket pThread is alive\n\n", GetTime());
+		}
+		else
+		{
+			Error_Data(Main, "Socket pThread is dead", 42, TERMINAL_LOG);
+		}
+		if(CurrentAlive & TEMP_ALIVE)
+		{
+			Sent_Queue(Main, Logging, "INFO", "Temperature pThread is alive");
+			printf("[%lf] [MAIN]: Temp pThread is alive\n\n", GetTime());
+		}
+		else
+		{
+			printf("Temp pThread is dead\n");
+			Error_Data(Main, "Temp pThread is dead", 42, TERMINAL_LOG);
+		}
+
+		if(CurrentAlive & LUX_ALIVE)
+		{
+			Sent_Queue(Main, Logging, "INFO", "Lux pThread is alive");
+			printf("[%lf] [MAIN]: Lux pThread is alive\n\n", GetTime());
+		}
+		else
+		{
+			Error_Data(Main, "Lux pThread is dead", 42, TERMINAL_LOG);
+		}
+		sleep(10);
+
+}
+	printf("[%lf] [MAIN]: All threads Exit\n\n", GetTime());
+
+	 pthread_join(Log_pThread, NULL);
+	 pthread_join(Socket_pThread, NULL);
+	 pthread_join(Temp_pThread, NULL);
+	 pthread_join(Lux_pThread, NULL);
+}
+/* Reference Poorn Mehta and Nikhil Divekar*/
+
+#include <mqueue.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+
+//#include "POSIX_Qs.h"
+#include "main.h"
+#include "TempThread.h"
+#include "LuxThread.h"
+#include "LoggingThread.h"
+#include "SocketThread.h"
+
+#define my_queue_main					"/my_queue_main_q"
+#define my_queue_log				"/my_queue_log_q"
+#define my_queue_server				"/my_queue_server_q"
+#define my_queue_temp					"/my_queue_temp_q"
+#define my_queue_lux					"/my_queue_lux_q"
+
+
+
+void * Log_Queue_Thread(void * args)
+{
+	struct Pthread_ArgsStruct *Arguments = args;
+	log_init(Arguments->LogFile_Path);
+	mqd_t MY_QUEUE;
+	struct mq_attr attr;
+	attr.mq_flags = 0;
+	attr.mq_maxmsg = 10;
+	attr.mq_msgsize = sizeof(ThreadStruct);
+	attr.mq_curmsgs = 0;
+	MY_QUEUE = mq_open(my_queue_log, O_CREAT | O_RDONLY | O_CLOEXEC, 0666, &attr);
+	if(MY_QUEUE == (mqd_t) -1)
+	{
+		Error_Data(Logging, "mq_open()", errno, TERMINAL_LOG);
+	}
+
+	ThreadStruct MsgRecv;
+	while(LogKillSafe > 0)
+	{
+		if(mq_receive(MY_QUEUE, &MsgRecv, sizeof(ThreadStruct), NULL) == -1)
+		{
+			Error_Data(Logging, "mq_receive()", errno, TERMINAL_LOG);
+		}
+
+		else
+		{
+			log_file(Arguments->LogFile_Path, &MsgRecv);
+			RunningThreads |= LOGGING_ALIVE;
+
+		}
+	}
+
+	printf("[%lf] Killed Log\n\n", GetTime());
+	RunningThreads &= ~LOGGING_ALIVE;
+	mq_unlink(my_queue_log);
+	printf("[%lf] Logging Thread: Logging Thread has terminated successfully and will now exit\n\n", GetTime());
+	return 0;
+}
+
+void Sent_Queue(uint8_t Src, uint8_t Dst, char* Log, char* Message)
+{
+	ThreadStruct StructSent =
+	{
+		.Source = Src,
+		.Dest = Dst
+	};
+	strcpy(StructSent.LogLevel, Log);
+	strcpy(StructSent.Msg, Message);
+
+	mqd_t MY_QUEUE;
+
+	char *destination_Address;
+	if(StructSent.Dest == 1)
+			destination_Address = my_queue_main;
+		else if(StructSent.Dest == 2)
+			destination_Address = my_queue_log;
+		else if(StructSent.Dest == 3)
+			destination_Address = my_queue_server;
+		else if(StructSent.Dest == 4)
+			destination_Address = my_queue_temp;
+		else if(StructSent.Dest == 5)
+			destination_Address = my_queue_lux;
+		else
+		{
+			StructSent.Dest = Logging;
+			destination_Address = my_queue_log;
+			char *text1 = "[ERROR]destination_Address Error!\n";
+			strcpy(StructSent.LogLevel, text1);
+		}
+
+
+	MY_QUEUE = mq_open(destination_Address, O_WRONLY | O_CLOEXEC);
+
+	char ErrMsg[250];
+
+	if(MY_QUEUE == (mqd_t) -1)
+	{
+		printf("\nError is tjete\n");
+	}
+
+
+	mq_send(MY_QUEUE, &StructSent, sizeof(ThreadStruct), 0);
+
+	mq_close(MY_QUEUE);
+}
+void Error_Data(uint8_t Src, char* Err_Msg, int errnum, uint8_t LogVal)
+{
+	char Error_Log[150];
+	char* SourceString;
+	sprintf(Error_Log, "%s: ", Err_Msg, Error_Log);
+
+	if(Src == 0)
+		SourceString = "Main Thread";
+	else if(Src ==1)
+		SourceString = "Logging Thread";
+	else if(Src ==2)
+		SourceString = "Socket Thread";
+	else if(Src == 3)
+		SourceString = "Temp Thread";
+	else if(Src == 4)
+		SourceString = "Lux Thread";
+	else
+		SourceString = "Unknown Thread";
+
+	if(LogVal ==  LOG_LINUX)
+	{
+			printf("[%lf][ERROR]'%s' => %s\n\n", GetTime(), SourceString, Error_Log);
+			Sent_Queue(Src, Logging, "ERROR", Error_Log);
+	}
+
+}
+
+
+void * Temperature_Thread(void * args)
+{
+    uint8_t temp1;
+    printf("\n  success");
+    bist();
+    mqd_t MY_QUEUE;
+
+    struct mq_attr attr;
+    attr.mq_flags = O_NONBLOCK;
+    attr.mq_maxmsg = 10;
+    attr.mq_msgsize = sizeof(ThreadStruct);
+    attr.mq_curmsgs = 0;
+
+
+
+    MY_QUEUE = mq_open(my_queue_temp, O_CREAT | O_RDONLY | O_NONBLOCK | O_CLOEXEC, 0666, &attr);
+    if(MY_QUEUE == (mqd_t) -1)
+    {
+			printf("Erro");
+		}
+
+    uint8_t Temperature_Unit = Celsius;
+    ThreadStruct MsgRecv;
+		float Temperature_C = 0;
+    static char Text_Log_Printed[150];
+    char Temperature_Text[150];
+
+    while(1)
+    {
+
+        RunningThreads |= TEMP_ALIVE;
+
+        if((flag == Temperature_Signal) && (Present_Temp_Sensor_Output == SENSOR_ON))
+        {
+                flag = 0;
+
+                temp1 = get_temp(&Temperature_C);
+
+                if(temp1)
+                {
+                        Error_Data(Temp, "Error while Reading Temperature", ENOMSG, LOG_LINUX);
+                        IF_RETRY = Retry_Mode_ON;
+                        Present_Temp_Sensor_Output = SENSOR_OFF;
+                }
+                else
+                {
+                        float Temperature_F = (Temperature_C * 1.8) + 32;
+                        float Temperature_K = Temperature_C + 273.15;
+
+                        if(Temperature_C > 40.000000 || Temperature_C < 5.000000)
+                      //  	gpio_on_off(gpio54,1);
+
+                        if(Temperature_Unit == Celsius)
+                        {
+                        	printf("Temperature :%f-C", Temperature_C);
+                            sprintf(Temperature_Text, "Temperature :%f-C", Temperature_C);
+                        }
+                        else if(Temperature_Unit == Fahrenheit)
+                         {
+                         	printf("Temperature :%f-F", Temperature_F);
+                           	sprintf(Temperature_Text, "Temperature :%f-F", Temperature_F);
+                         }
+                        else if(Temperature_Unit == Kelvin)
+                        {
+							printf("Temperature :%f-K", Temperature_K);
+                            sprintf(Temperature_Text,"Temperature :%f-K", Temperature_K);
+                        }
+                        Sent_Queue(Temp, Logging, "INFO", Temperature_Text);
+
+
+                        int temp1 = mq_receive(MY_QUEUE, &MsgRecv, sizeof(ThreadStruct), NULL);
+                        if(temp1 != -1)
+                        {
+                                if(temp1 == sizeof(ThreadStruct))
+                                {
+                                        if(strcmp("TC",MsgRecv.Msg) == 0)
+                                        {
+                                                Temperature_Unit = Celsius;
+                                                sprintf(Temperature_Text, "Temperature :%f-C", Temperature_C);
+                                        }
+                                        else if(strcmp("TF",MsgRecv.Msg) == 0)
+                                        {
+                                                Temperature_Unit = Fahrenheit;
+                                                sprintf(Temperature_Text, "Temperature :%f-F", Temperature_F);
+                                        }
+                                        else if(strcmp("TK",MsgRecv.Msg) == 0)
+                                        {
+                                                Temperature_Unit = Kelvin;
+                                                sprintf(Temperature_Text, "Temperature :%f-C", Temperature_K);
+                                        }
+                                        Sent_Queue(Temp, Socket, "INFO", Temperature_Text);
+                                }
+                                else
+									Error_Data(Temp, Text_Log_Printed, ENOMSG, LOG_LINUX);
+
+                        }
+                }
+        }
+
+
+        else if((flag == SIGUSR1) || (flag == SIGUSR2) || ((Present_Temp_Sensor_Output == SENSOR_OFF) && (IF_RETRY == Temp_No_Retry)))
+        {
+            if((flag == SIGUSR1) || (flag == SIGUSR2))        Sent_Queue(Temp, Logging, "INFO", "[ERROR]Terminating Temperature Thread");
+
+
+            if(mq_unlink(my_queue_temp) == 0)
+
+            {
+                Sent_Queue(Temp, Logging, "INFO", "Successfully unlinked Temp queue!");
+            }
+
+            char TempTxt[150];
+            if(flag == SIGUSR1)
+            {
+                sprintf(TempTxt, "[ERROR]USR1 Received=>%d", flag);
+                Sent_Queue(Temp, Logging, "INFO", TempTxt);
+            }
+            else if(flag == SIGUSR2)
+            {
+                sprintf(TempTxt, "[ERROR]USR2 Received=>%d", flag);
+                Sent_Queue(Temp, Logging, "INFO", TempTxt);
+            }
+            LogKillSafe--;
+            RunningThreads &= ~TEMP_ALIVE;
+            Sent_Queue(Temp, Logging, "INFO", "Temp Thread terminated successfully");
+
+
+            return 0;
+        }
+    }
+}
+
+
+void * LuxThread(void * args)
+{
+
+	uint8_t resp;
+	resp = LuxThread_Init();
+	if(resp)
+	{
+		Error_Data(Lux, "[ERROR]Error Initializing Lux Sensor", ENOMSG, LOG_LINUX);
+		Lux_Error_Retry = Retry_Score;
+		LUX_SENSOR_ST = SENSOR_OFF;
+	}
+	else
+	{
+		Lux_Error_Retry = 0;
+		LUX_SENSOR_ST = SENSOR_ON;
+	}
+
+
+	mqd_t MY_QUEUE;
+
+
+	struct mq_attr attr;
+	attr.mq_flags = O_NONBLOCK;
+	attr.mq_maxmsg = 10;
+	attr.mq_msgsize = sizeof(ThreadStruct);
+	attr.mq_curmsgs = 0;
+
+
+	MY_QUEUE = mq_open(my_queue_lux, O_CREAT | O_RDONLY | O_NONBLOCK | O_CLOEXEC, 0666, &attr);
+	if(MY_QUEUE == (mqd_t) -1)
+	{
+		Error_Data(Lux, "mq_open()", errno, LOG_LINUX);
+	}
+
+
+
+	ThreadStruct MsgRecv;
+
+	float Lux_Value = 0;
+
+	static char Text_In_Log_File[150];
+
+	char Lux_Text[150];
+
+
+	while(1)
+	{
+		RunningThreads |= LUX_ALIVE;
+
+		if((flag == Lux_Signal) && (LUX_SENSOR_ST == SENSOR_ON))
+		{
+				flag = 0;
+
+				resp = get_lux(&Lux_Value);
+
+				if(resp)
+				{
+						Error_Data(Lux, "[ERROR]Error while Reading Lux\n", ENOMSG, LOG_LINUX);
+						Lux_Error_Retry = Retry_Score;
+						LUX_SENSOR_ST = SENSOR_OFF;
+				}
+				else
+				{
+						sprintf(Lux_Text, "[INFO]Lux :%f", Lux_Value);
+
+            Sent_Queue(Lux, Logging, "INFO", Lux_Text);
+												int resp = mq_receive(MY_QUEUE, &MsgRecv, sizeof(ThreadStruct), NULL);
+												if(resp != -1)
+												{
+														if(resp == sizeof(ThreadStruct))
+														{
+
+
+																if(strcmp("LX",MsgRecv.Msg) == 0)
+																{
+
+
+																		sprintf(Lux_Text, "Lux is *%f*", Lux_Value);
+
+																}
+
+																Sent_Queue(Lux, Socket, "INFO", Lux_Text);
+														}
+														else
+														{
+																sprintf(Text_In_Log_File, "[ERROR]Issue with received bytes!");
+
+														}
+												}
+										}
+}
+
+		else if((flag == SIGUSR1) || (flag == SIGUSR2) || ((LUX_SENSOR_ST == SENSOR_OFF) && (Lux_Error_Retry == 0)))
+		{
+
+			if((flag == SIGUSR1) || (flag == SIGUSR2))		Sent_Queue(Lux, Logging, "INFO", "USR- Passed\n");
+
+			if(mq_unlink(my_queue_lux) == 0)
+
+			{
+				Sent_Queue(Lux, Logging, "INFO", "Successfully unlinked Lux queue!");
+			}
+
+			char luxTxt[150];
+			if(flag == SIGUSR1)
+			{
+				sprintf(luxTxt, "[ERROR]USR1 Received =>%d", flag);
+				Sent_Queue(Lux, Logging, "INFO", luxTxt);
+			}
+			else if(flag == SIGUSR2)
+			{
+				sprintf(luxTxt, "[ERROR]USR2 Received =>%d", flag);
+				Sent_Queue(Lux, Logging, "INFO", luxTxt);
+			}
+
+
+			LogKillSafe--;
+			RunningThreads &= ~LUX_ALIVE;
+			Sent_Queue(Lux, Logging, "INFO", "Lux Thread terminated successfully");
+			return 0;
+		}
+	}
+}
+
+
+void * SocketThread(void * args)
+{
+
+	if(Server_initialisation())
+	{
+		Error_Data(Socket, "[ERROR]Socket Init Failed", ENOMSG, LOG_LINUX);
+		return 0;
+	}
+	else		Sent_Queue(Socket, Logging, "INFO", "Socket Initialization Success\n");
+
+
+	mqd_t MY_QUEUE;
+
+
+	struct mq_attr attr;
+	attr.mq_flags = 0;
+	attr.mq_maxmsg = 10;
+	attr.mq_msgsize = sizeof(ThreadStruct);
+	attr.mq_curmsgs = 0;
+
+
+	MY_QUEUE = mq_open(my_queue_server, O_CREAT | O_RDONLY | O_CLOEXEC, 0666, &attr);
+	if(MY_QUEUE == (mqd_t) -1)
+	{
+		Error_Data(Socket, "mq_open()", errno, LOG_LINUX);
+	}
+
+	ThreadStruct MsgRecv;
+
+	while(1)
+	{
+
+		while((flag != SIGUSR1) && (flag != SIGUSR2))
+		{
+
+			SOCK_ST = SOCK_ON;
+
+			RunningThreads |= SOCKET_ALIVE;
+
+			custom_socket = accept(socket_fd, (struct sockaddr *)0, 0);
+
+			if(custom_socket < 0)
+			{
+				Error_Data(Socket, "[ERROR]Failed to Accept Socket\n", errno, LOG_LINUX);
+			}
+			else
+			{
+				cust_sock = custom_socket;
+			}
+
+			   MEASURED_IN = read(custom_socket,p2,sizeof(my_struct_to_be_passed));
+            if(MEASURED_IN < 0)
+            {
+                Error_Data(Socket, "[ERROR]Failed to Read Socket\n", errno, LOG_LINUX);
+            }
+
+            char Socket_Text[150];
+            sprintf(loglevel_sock, "INFO");
+
+            char Socket_Text_q[60];
+            sprintf(loglevel_q, "INFO");
+
+            if(strcmp("Exit", p2->string_written) == 0)
+            {
+                sprintf(Socket_Text, "[INFO]Socket Thread Exiting\n");
+                Sent_Queue(Socket, Logging, loglevel_sock, Socket_Text);
+
+                Sent_Queue(Socket, Logging, "INFO", "User Signal Passed - Terminating Socket Thread");
+
+                if(mq_unlink(my_queue_server) == 0)
+
+                {
+                    Sent_Queue(Socket, Logging, "INFO", "Successfully unlinked Socket queue!");
+                }
+
+                char TempTxt[150];
+                if(flag == SIGUSR1)
+                {
+                    sprintf(TempTxt, "[ERROR]USR1 - Received : %d", flag);
+                    Sent_Queue(Socket, Logging, "INFO", TempTxt);
+                }
+                else
+                {
+                    sprintf(TempTxt, "[ERROR]USR2 - Received : %d", flag);
+                    Sent_Queue(Socket, Logging, "INFO", TempTxt);
+                }
+								LogKillSafe--;
+								RunningThreads &= ~SOCKET_ALIVE;
+
+                Sent_Queue(Socket, Logging, "INFO", "Socket Thread terminated successfully");
+
+
+                return 0;
+            }
+						else
+            {
+                if(strcmp("Temperature", p2->string_written) == 0)
+                {
+										req_warning =	TEMP_WARN_Req;
+                    if(p2->num == Celsius)
+                    {
+                        sprintf(Socket_Text, "[INFO]Client Requested Temperature in C");
+                        sprintf(Socket_Text_q, "TC");
+                    }
+                    else if(p2->num == Fahrenheit)
+                    {
+                        sprintf(Socket_Text, "[INFO]lient Requested Temperature in F");
+                        sprintf(Socket_Text_q, "TF");
+                    }
+                    else if(p2->num == Kelvin)
+                    {
+                        sprintf(Socket_Text, "[INFO]Client Requested Temperature in K");
+                        sprintf(Socket_Text_q, "TK");
+                    }
+                    else
+                    {
+                        sprintf(Socket_Text, "[INFO]Client Requested Temperature in Invalid Parameter - Sending in C");
+                        sprintf(loglevel_sock, "WARNING");
+                        sprintf(Socket_Text_q, "TC");
+                    }
+
+                    Sent_Queue(Socket, Temp, loglevel_q, Socket_Text_q);
+                }
+
+                else if(strcmp("Lux", p2->string_written) == 0)
+                {
+										req_warning =	LUX_WARN_Req;
+                    sprintf(Socket_Text, "Client Requested Lux");
+                    sprintf(Socket_Text_q, "LX");
+                    Sent_Queue(Socket, Lux, loglevel_q, Socket_Text_q);
+                }
+
+                else
+                {
+                    sprintf(Socket_Text, "Invalid Client Request");
+                    sprintf(loglevel_sock, "ERROR");
+                }
+
+                Sent_Queue(Socket, Logging, loglevel_sock, Socket_Text);
+
+                struct timespec tm;
+                clock_gettime(CLOCK_REALTIME, &tm);
+                tm.tv_sec += 2;
+
+                int resp = mq_timedreceive(MY_QUEUE, &MsgRecv, sizeof(ThreadStruct), NULL, &tm);
+								printf("Resp: %d\n", resp);
+                if(resp == -1)
+                {
+                    Error_Data(Socket, "mq_timedreceive()", errno, LOG_LINUX);
+                    p1->num = 0;
+                }
+                else if(resp < sizeof(ThreadStruct))
+                {
+                    Error_Data(Socket, "mq_timedreceive()", errno, LOG_LINUX);
+                    p1->num = 0;
+                }
+                else if(resp == sizeof(ThreadStruct))
+                {
+                    sprintf(Socket_Text, "[INFO]Response from Queue: %s", MsgRecv.Msg);
+
+                    strcpy(loglevel_sock, "INFO");
+
+										if(req_warning ==TEMP_WARN_Req)	{printf("1st type : ");p1->num = TEMP_WARN;}
+										else if(req_warning == LUX_WARN_Req)		{printf("2st type : %d",LUX_WARN);p1->num = LUX_WARN;}
+										else
+										{
+											p1->num = 0;
+										}
+                    Sent_Queue(Socket, Logging, loglevel_sock, Socket_Text);
+                }
+
+                custom_socket = cust_sock;
+                MEASURED_OUT = write(custom_socket,p1,sizeof(my_struct_to_be_passed));
+                if (MEASURED_OUT < 0)
+                {
+                    Error_Data(Socket, "[ERROR]Failed to write socket!", errno, LOG_LINUX);
+                }
+                else
+                {
+                    sprintf(Socket_Text, "[INFO]Data sent Successfully to the Remote Client");
+                    strcpy(loglevel_sock, "INFO");
+                    Sent_Queue(Socket, Logging, loglevel_sock, Socket_Text);
+                }
+            }
+        }
+    }
+}
+/*
+*@File:SocketThread.c
+*@Description_File: C file for Socket Server
+*@Author:Raj Lavingia and Yash Gupte
+*@Date: 03/29/2018
+*/
+#include "SocketThread.h"
+
+uint8_t Server_initialisation(void)
+{
+		char Message_Text[60];
+		sprintf(Message_Text, "Socket Server Created with TID: %ld", syscall(SYS_gettid));
+		Sent_Queue(Socket, Logging, "[INFO_SERVER]", Message_Text);
+		sprintf(Message_Text, "Socket Server Created with PID: %ld", syscall(SYS_getpid));
+		Sent_Queue(Socket, Logging, "[INFO_SERVER", Message_Text);
+		struct sockaddr_in custom_server;
+
+		//Socket Dexcriptor
+		socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+		if(socket_fd < 0)
+		{
+			printf("Socket Creation Failed\n");
+			exit (1);
+		}
+
+		//ports defined
+		custom_server.sin_family = AF_INET;
+		custom_server.sin_addr.s_addr = INADDR_ANY;
+		custom_server.sin_port = htons(PORT);
+
+		//Binding successful or not
+		if(bind(socket_fd, (struct sockaddr *)&custom_server, sizeof(custom_server)) < 0)
+		{
+			printf("Binding Failed\n");
+			exit (1);
+		}
+
+		//Listen to multiple clients at the same time
+		if(listen(socket_fd, 5) < 0)
+		{
+			printf("Listening Failed\n");
+			exit (1);
+		}
+		return 0;
+}
+/*
+*@File:socket_client.c
+*@Description_File: C File for Light Sensor
+*@Author:Raj Lavingia and Yash Gupte
+*@Date: 03/26/2018
+*/
+
+#include "socket_client.h"
+
+//Variables declared
+uint8_t Resultant_status = 0;
+
+int flag = 0;
+
+typedef struct
+{
+  char string_written[150];
+  int num;
+}my_struct_to_be_passed;
+
+
+
+my_struct_to_be_passed data1, data2;
+my_struct_to_be_passed *p1 = &data1;
+my_struct_to_be_passed *p2 = &data2;
+
+char IP_Addressed_User[30]="10.0.0.227";
+
+
+void gpio_on_off_client(uint8_t pin,uint8_t state)
+{
+	FILE *fp1;
+
+	if(pin<4 && state<2)
+	{
+		fp1 = fopen(LED_Dir_Path[pin],"w");
+		if(fp1==NULL) printf("Error in led\n");
+		else
+		printf("\n Success file open");
+	}
+	else
+	{
+		printf("\n Error in pin or state\n");
+		return ;
+	}
+
+	fseek(fp1,0,SEEK_SET);
+	fprintf(fp1,"%d",pin);
+	fseek(fp1,0,SEEK_SET);
+	fprintf(fp1,"%s","out");
+	fclose(fp1);
+
+	fp1 = 	fopen(LED_Val_Path[pin],"w");
+	if(fp1==NULL) printf("Error in led\n");
+	else
+	printf("\n Success file open");
+
+	fseek(fp1,0,SEEK_SET);
+	fprintf(fp1,"%d",state);
+
+	fclose(fp1);
+
+}
+
+
+
+int main(int argc, char *argv[])
+{
+  printf("[INFO]Socket IPC \n");
+  char buff;
+  //At the time of socket start ,display the time stamp on local machine
+	clock_gettime(CLOCK_REALTIME, &timespec_struct);
+  printf("[INFO] You have 4 options: 1) C = Celsius 2) F = Fehrenheit 3) K = Kelvin 4) L=lux \n");
+  scanf("%s",&buff);
+  if(buff=='C' || buff=='F' | buff=='K' | buff=='L')
+  {
+  	// if(buff=='C' || buff=='F' | buff=='K')
+  	// {
+  	// 	Resultant_status = Temperature_Status;
+  	// }
+  	// else
+  	// {
+  	// 	Resultant_status = Lux_Status;
+  	// }
+  	printf("[INFO]Inside loop 2");
+	if(argc > 0)
+	{
+    printf("[INFO]Inside the loop");
+    //check for celsius
+    printf("[INFO]Success in getting arguments from user\n");
+		if(buff=='C')
+		{
+      printf("[INFO]Now Temperature will be in Celsius\n");
+			Resultant_status = Temperature_Status;
+			strcpy(p1->string_written, "Temperature");
+			  p1->num = 1;
+		}
+    //check for fehrenheit
+		else if(buff=='F')
+		{
+      printf("[INFO]Now Temperature will be in Fehrenheit\n");
+			Resultant_status = Temperature_Status;
+			strcpy(p1->string_written, "Temperature");
+      p1->num = 2;
+
+		}
+    //check for kelvin
+		else if(buff=='K')
+		{
+      printf("[INFO]Now Temperature will be in Kelvin\n");
+      Resultant_status = Temperature_Status;
+
+			strcpy(p1->string_written, "Temperature");
+      		  p1->num = 3;
+		}
+		else if(buff=='L')
+		{
+      printf("[INFO]Request is of Lux measurement\n");
+      Resultant_status = Temperature_Status;
+
+			strcpy(p1->string_written, "Lux");
+      		  p1->num = 4;
+		}
+
+	}
+}
+	else
+	{
+	    Resultant_status = Temperature_Status;
+	    strcpy(p1->string_written, "[INFO]Temperature");
+	    printf("[INFO]By default in Celsius\n");
+      		  p1->num = 1;
+	}
+
+
+	socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if(socket_fd < 0)
+	{
+		printf("[ERROR]Socket Creation Failed\n");
+    	exit (1);
+	}
+
+	struct timeval time1;
+	time1.tv_sec = 2;
+	time1.tv_usec = 0;
+  client.sin_family = AF_INET;
+  client.sin_port = htons(PORT);
+
+	if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &time1, sizeof(struct timeval)))
+	{
+		printf("[ERROR]Set sock opt failed\n");
+	}
+
+	if(inet_pton(AF_INET, IP_Addressed_User, &client.sin_addr)<=0)
+	{
+	  printf("[ERROR]Address not supported \n");
+	}
+
+	if(connect(socket_fd, (struct sockaddr *)&client, sizeof(client)) < 0)
+	{
+		printf("[ERROR]Socket Connection Failed\n");
+	}
+
+	gettimeofday(&current_time, NULL);
+	printf("[INFO]Time Value is %lu %lu\n", current_time.tv_sec, current_time.tv_usec);
+  	MEASURED_OUT = write(socket_fd,p1,sizeof(my_struct_to_be_passed));
+
+	if (MEASURED_OUT < 0)
+	{
+		printf("[ERROR]write failed\n");
+    exit (1);
+	}
+
+	gettimeofday(&current_time, NULL);
+	MEASURED_IN = read(socket_fd,p2,sizeof(my_struct_to_be_passed));
+	if(MEASURED_IN < 0)
+	{
+		printf("[ERROR]Read Failed\n");
+		exit (1);
+	}
+
+	else if(MEASURED_IN == 0)
+  {
+    printf("[ERROR]Read Failed 2\n");
+  }
+
+  else if(MEASURED_IN == sizeof(my_struct_to_be_passed))
+	{
+		if(Resultant_status == Temperature_Status)
+		{
+		      printf("[INFO]value of P2 is %d",p2->num);
+			if(p2->num == Temperature_OK)
+			{
+
+			printf("[ERROR]Temperature is OK\n");
+			}
+			else if(p2->num == Temperature_HIGH)
+			{
+			//	gpio_on_off_client(gpio56,1);
+				printf("[ERROR]It is hot\n");
+			}
+			else if(p2->num == Temperature_LOW)
+			{
+				//gpio_on_off_client(gpio56,1);
+				printf("[ERROR]It's too cold\n");
+			}
+			else
+			{
+			printf("[ERROR]Temperature state couldn't be determined\n")	;
+			}
+		}
+		else if(Resultant_status == Lux_Status)
+		{
+				printf("[INFO]p2 is %d",p2->num);
+				if(p2->num == Day_Time)
+				{
+				printf("[INFO]Daytime\n");
+				}
+				else if(p2->num == Night_Time)
+				{
+				printf("[INFO]Nighttime\n");
+				}
+				else
+				{
+				printf("[ERROR]Could not be determined\n");
+				}
+		}
+		else
+    {
+      printf("[ERROR]Nothing could be determined\n");
+    }
+	}
+
+	close(socket_fd);
+	return 0;
+}
+/*
+*@File:temp_task.c
+*@Description_File: C File for Temperature Sensor
+*@Author:Raj Lavingia and Yash Gupte
+*@Date: 03/23/2018
+*/
+#include "TempThread.h"
+#include "main.h"
+
+//pthread mutex lock used for locking unlocking of data
+pthread_mutex_t lock;
+
+uint8_t Warning_LED_Indicator = Base_Temperature;
+
+
+//Function For Base register write
+uint8_t base_reg_write(uint8_t* buffedesired_value,int buffer_bytes)
+{
+        //Go and write to a particular location, store value in temp var
+    int temp=write(File_Descriptor, buffedesired_value, buffer_bytes);
+        //Check if temp is equla to bytes read or not
+    if(temp!=buffer_bytes)
+    {
+      Error_Data(Temp, "[ERROR]Insufficent Buffer Bytes!\n", errno, LOG_LINUX);
+      return 1;
+    }
+    else
+    {
+            //else return pass
+      return 0;
+    }
+}
+
+//Function for base register read
+uint8_t base_reg_read(uint8_t *buffedesired_value,int buffer_bytes)
+{
+      //Go and read from the particular location
+    int temp =read(File_Descriptor, buffedesired_value, buffer_bytes);
+        //check if temp is equal to bytes read
+    if(temp!=buffer_bytes)
+    {
+      Error_Data(Temp, "[ERROR]Insufficent Buffer Bytes!\n", errno, LOG_LINUX);
+      return 1;
+    }
+    else
+    {
+            //if true, then write the value which is read and return pass
+			printf("[INFO] Read value is %d \n",*buffedesired_value);
+      return 0;
+    }
+}
+
+uint8_t write_reg_ptr(uint8_t* x)
+{
+      //Check if the temp value is returned success by the base reg Write_Register_Pointer
+    int temp = base_reg_write(x,1);
+          //if not equal to 0 return fail
+    if(temp!=0)
+    {
+      Error_Data(Temp, "[ERROR]Return!=0\n", errno, LOG_LINUX);
+      return 1;
+    }
+    else
+    {
+      return 0;
+    }
+}
+
+uint8_t temp_read_reg(uint8_t* x)
+{
+      //while reading , it will read 2 bytes not 3
+    uint8_t temp = base_reg_read(x,2);
+    if(temp!=0)
+    {
+      Error_Data(Temp, "[ERROR]Return!=0\n", errno, LOG_LINUX);
+      return 1;
+    }
+    else
+    {
+      //if equal to 0 then return success
+      return 0;
+    }
+}
+//While sending bytes in write send 3 bytyes, lower 8, higher 8 and base address
+uint8_t temp_write_reg(uint8_t* x)
+{
+        //if return not equal to 0 the return fail
+    int temp = base_reg_write(x,3);
+    if(temp!=0)
+    {
+      Error_Data(Temp, "[ERROR]Return!=0\n", errno, LOG_LINUX);
+      return 1;
+    }
+
+    else
+    {
+            //if equal to 0 then return success
+      return 0;
+    }
+
+}
+
+//Function for starting thr Temperature sensor
+uint8_t temp_initial_sensor(void)
+{
+        //I2c Bus opened // path is predefined
+        File_Descriptor = open(I2C_BUS, O_RDWR);
+        if(File_Descriptor <0)
+        {
+                Error_Data(Temp, "[ERROR]open(): I2C Bus", errno, LOG_LINUX);
+                return 1;
+        }
+        if(ioctl(File_Descriptor, I2C_SLAVE, Address_I2C) <0)
+        {
+                Error_Data(Temp, "[ERROR]ioctl(): I2C Bus", errno, LOG_LINUX);
+                return 1;
+        }
+      
+        return 0;
+}
+
+//Common Custom function for all registers check for writing data to register
+uint8_t main_write_register(uint8_t register_addr, uint16_t desired_val)
+{
+  //Sent_Queue(Temp, Logging, "[INFO]", "Main Write Register Pass in second attempt\n");
+  //register addr is the respective base address and desired value is the value you want to write in that registe
+	uint8_t buffer_array[3]={register_addr,desired_val>>8,desired_val & 0x00FF};
+  int temp = ((register_addr < 0x01) || (register_addr > 0x03));
+  if(temp)
+    {
+      printf("[Error] In register addressing\n");
+      Error_Data(Temp, "[Error] In register addressing\n", ENOMSG, LOG_LINUX);
+      return 1;
+    }
+  temp = (write_reg_ptr(&register_addr));
+  if(temp)
+    {
+     	printf("[Error] In writing to register\n");
+      Error_Data(Temp, "[Error] In writing to register\n", ENOMSG, LOG_LINUX);
+      return 1;
+    }
+  temp = (temp_write_reg(&buffer_array));
+  if(temp)
+    {
+      printf("[Error]In writing to temp\n");
+      Error_Data(Temp, "[Error]In writing to temp\n", ENOMSG, LOG_LINUX);
+      return 1;
+    }
+    return 0;
+}
+
+//Common Custom function for all registers check for reading data to register
+uint8_t main_read_register(uint8_t register_addr, uint8_t* desired_val)
+{
+  int temp = (write_reg_ptr(&register_addr));
+  if(temp)
+    {
+      printf("[Error]In writing to register\n");
+      Error_Data(Temp, "[Error]In writing to register\n", ENOMSG, LOG_LINUX);
+      return 1;
+    }
+  temp = (temp_read_reg(desired_val));
+  if(temp)
+    {
+      printf("[Error]In reading from register");
+      Error_Data(Temp, "[Error]In reading from register", ENOMSG, LOG_LINUX);
+      return 1;
+    }
+  //  Sent_Queue(Temp, Logging, "[INFO]", "Main Read Register Pass\n");
+    return 0;
+}
+
+//Check all registers for write and read equality for thigh and tlow
+uint8_t all_registers_check(void)
+{
+        static uint8_t Register_buffer_storage[2];
+        uint16_t final_threshold_high = Threshold_upper_Limit << 8;
+        int temp = (main_write_register(THigh_register, final_threshold_high));
+        if(temp)
+        {
+          printf("[Error]Thigh not written \n");
+          Error_Data(Temp, "[Error]Thigh not written \n", ENOMSG, LOG_LINUX);
+          return 1;
+        }
+        temp=(main_read_register(THigh_register, &Register_buffer_storage[0]));
+        if(temp)
+        {
+          printf("[Error]Thigh not read \n");
+          Error_Data(Temp, "[Error]Thigh not read \n", ENOMSG, LOG_LINUX);
+          return 1;
+        }
+
+        temp = (main_write_register(TLow_register, Threshold_lower_Limit << 8));
+        if(temp)
+        {
+          printf("[Error]Tlow not written \n");
+          Error_Data(Temp, "[Error]Tlow not written \n", ENOMSG, LOG_LINUX);
+          return 1;
+        }
+
+        if(main_read_register(TLow_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]Tlow not read \n");
+          Error_Data(Temp, "[Error]Tlow not read \n", ENOMSG, LOG_LINUX);
+          return 1;
+        }
+  //
+        return 0;
+}
+
+//Configuration register write and read values
+uint8_t config_register_temperature(void)
+{
+        static uint8_t Register_buffer_storage[2];
+        static char Text_Log_Printed[150];
+
+        if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]Config Register not written properly\n");
+          Error_Data(Temp,"[Error]Config Register not written properly\n", ENOMSG, LOG_LINUX);
+
+          return 1;
+        }
+
+        Sent_Queue(Temp, Logging, "[INFO]", "\nConfig Test Success\n");
+
+        if(main_write_register(Base_Config_register, SM_MODE_ON))
+        {
+          printf("[Error]SM Mode On write\n");
+          Error_Data(Temp, "[Error]SM Mode On write\n", ENOMSG, LOG_LINUX);
+
+          return 1;
+        }
+
+        if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]SM Mode On read\n");
+          Error_Data(Temp, "[Error]SM Mode On read\n", ENOMSG, LOG_LINUX);
+
+          return 1;
+        }
+
+        if(main_write_register(Base_Config_register, Fault_Bits_Read))
+        {
+          printf("[Error]Fault Bits write");
+          Error_Data(Temp, "[Error]Fault Bits write\n", ENOMSG, LOG_LINUX);
+
+          return 1;
+        }
+
+			  if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]Fault Bits read\n");
+          Error_Data(Temp, "[Error]Fault Bits read\n", ENOMSG, LOG_LINUX);
+          return 1;
+        }
+
+			  if(main_write_register(Base_Config_register, EM_Mode_ON))
+        {
+          printf("[Error]EM On write");
+          Error_Data(Temp, "[Error]EM On write \n", ENOMSG, LOG_LINUX);
+          return 1;
+        }
+
+        if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]EM On read");
+          Error_Data(Temp, "[Error]EM On read \n", ENOMSG, LOG_LINUX);
+          return 1;
+        }
+
+    		if(main_write_register(Base_Config_register, CR_MODE_ON))
+        {
+          printf("[Error]CR On write");
+          Error_Data(Temp, "[Error]CR On write\n", ENOMSG, LOG_LINUX);
+          return 1;
+        }
+
+        if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          Error_Data(Temp, "[ERROR]Error in Reading Base register\n", ENOMSG, LOG_LINUX);
+        	return 1;
+        }
+
+        return 0;
+}
+
+//Function for calculating the final value of temperature using ADC
+uint8_t get_temp(float *final_temp_data_stored)
+{
+    
+        static uint8_t Register_buffer_storage[2];
+        int temp = (main_read_register(data_register_read, &Register_buffer_storage[0]));
+        if(temp)
+        {
+          Error_Data(Temp, "[ERROR] Register read fail\n", ENOMSG, LOG_LINUX);
+          return 1;
+        }
+        *final_temp_data_stored = ((Register_buffer_storage[0] << 8) | Register_buffer_storage[1]) >> 4;
+        *final_temp_data_stored *= 0.0625;
+        printf( "[INFO]Generated Temp Value : %f",*final_temp_data_stored );
+        //check for thresholds
+
+        if(*final_temp_data_stored < Threshold_lower_Limit)
+        {
+          Sent_Queue(Temp, Logging, "[INFO]", "\nValue is below threshold\n");
+          Warning_LED_Indicator = Below_Threshold;
+        }
+        else if(*final_temp_data_stored > Threshold_upper_Limit)
+        {
+          Sent_Queue(Temp, Logging, "[INFO]", "\nValue is Above threshold\n");
+          Warning_LED_Indicator = Above_Threshold;
+        }
+        else
+        {
+          Sent_Queue(Temp, Logging, "[INFO]", "\nValue is equals threshold\n");
+          Warning_LED_Indicator = Base_Temperature;
+        }
+				printf( "[INFO]temp value : %f",*final_temp_data_stored);
+			  return 0;
+}
+
+
+
+//Function for checking thr BST of Temperature
+uint8_t BIST_Temp_Check(void)
+{
+    printf("[INFO]In temp check function");
+		char data_print[60];
+		sprintf(data_print, "[INFO]Temperature Thread Created Successfully with TID: %ld\n", syscall(SYS_gettid));
+    Sent_Queue(Temp, Logging, "[INFO]", data_print);
+		sprintf(data_print, "[INFO]PID: %ld\n", syscall(SYS_getpid));
+    Sent_Queue(Temp, Logging, "[INFO]", data_print);
+
+		pthread_mutex_lock(&lock);
+
+    int temp = temp_initial_sensor();
+		if(temp != 0)
+		{
+      printf("[INFO]Sensor not initilised");
+			Error_Data(Temp, "[Error]Temperataure sensor not initialised \n", ENOMSG, LOG_LINUX);
+			pthread_mutex_unlock(&lock);
+			return 1;
+		}
+    else
+    {
+      printf("[INFO]in success loop");
+      Sent_Queue(Temp, Logging, "INFO", "\nTemperature Sensor Initiliazed Successfully\n");
+    }
+
+		int temp1 = main_write_register(Base_Config_register, Configuration_Register_Default_1);
+		if(temp1 != 0)
+		{
+      printf("[ERROR]reset successfullu not done");
+			Error_Data(Temp, "[Error]Sensor Not reset properly\n", ENOMSG, LOG_LINUX);
+			pthread_mutex_unlock(&lock);
+			return 1;
+		}
+    else
+    {
+      printf("[INFO]reset successfullu done");
+      Sent_Queue(Temp, Logging, "INFO", "\nReset Successfully\n");
+    }
+
+		 pthread_mutex_unlock(&lock);
+     printf("[INFO]Normal function\n");
+	 	
+    return 0;
+
+}
+void bist()
+{
+  uint8_t temp1;
+  //will check for all registers and start the temp sensor
+  temp1 = BIST_Temp_Check();
+  printf("[INFO]success value is %d",temp1);
+  if(temp1)
+  {
+    printf("[INFO]inital temp check not success");
+    Error_Data(Temp, "Error while Initializing Temperature Sensor", ENOMSG, LOG_LINUX);
+    IF_RETRY = Retry_Mode_ON;
+    Present_Temp_Sensor_Output = SENSOR_OFF;
+  }
+  else
+  {
+    printf("[INFO]inital temp check  success");
+    IF_RETRY = 0;
+    Present_Temp_Sensor_Output = SENSOR_ON;
+  }
+}
+
+
+// #ifndef LOGGINGTHREAD_H_
+// #define LOGGINGTHREAD_H_
+#ifndef LOGGINGTHREAD_H_
+#define LOGGINGTHREAD_H_
+
+#include "main.h"
+
+/* This function Opens the file with specified name or uses default value if not defined.
+   Successful opening result in Success log. Else Error message is logged*/
+uint8_t log_init(char* user_path);
+
+/* Logs the particular thread in the source description with time stamp and 
+   even the destination description with time stamp.*/
+uint8_t log_file(char* user_path, ThreadStruct* StringToSend);
+
+#endif /* LOGGINGTHREAD_H_ */
+/*
+*@File:main.h
+*@Description_File: Header File for main function
+*@Author:Raj Lavingia
+*@Date: 03/23/2018
+*/
+
+/*Inclusion of Libraries for main.c*/
+#ifndef MAIN_H_
+#define MAIN_H_
+
+#include <stdio.h>
+#include <math.h> //pow
+#include <float.h>
+#include <complex.h>
+#include <time.h>
+#include <mqueue.h>
+#include <unistd.h>
+#include <string.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <linux/i2c-dev.h>
+#include <assert.h>
+#include <errno.h>
+#include <signal.h>
+#include <malloc.h>
+
+
+#include <stdint.h>
+#include <stdbool.h>
+#include <sys/time.h>
+
+typedef struct 
+{
+	uint8_t Src;
+	uint8_t Dst;
+	char log_level[150];
+	char Message[150];
+} ThreadStruct;
+
+
+ char* ThreadString[]={" ","Main","Logging","Socket","Temperature","Lux","Unknown"};
+
+ #endif
+#ifndef UNITTESTLOG_H_
+#define UNITTESTLOG_H_
+
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <pthread.h>
+#include <signal.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
+#include <linux/i2c-dev.h>
+#include <math.h>
+#include <float.h>
+#include <complex.h>
+#include <stdint.h>
+#include <time.h>
+#include <mqueue.h>
+#include <stdio.h>
+#include "main.h"
+#include "LoggingThread.h"
+
+#define HB_PORT_ADR 5000
+#define IP_ADR      "127.0.0.1"
+
+#define	MAIN_TASK	(0X00)
+#define	LIGHT_TASK	(0X01)
+#define	TEMP_TASK	(0X02)
+#define	SOCKET_TASK	(0X03)
+
+#define	VALUE 		(0X00)
+#define	STRING 		(0X01)
+
+pthread_t logger_id, light_id, temp_id, socket_id;
+
+char file_name[50];
+
+FILE *fptr;
+
+struct threadParam
+{
+char *filename;
+};
+
+ThreadStruct STRUCT; 
+
+typedef enum {Success=0,FilePtrErr=1,StrCmpErr=2,ValCmpErr=3,DataValErr=4,SourceIdErr=5}ErrorState;
+char* ErrorStates[]={"Success\n","File Pointer Error\n","String Compare Error\n","Value Compare Error\n","Data Value Error\n","Source ID Error\n"};
+// int logger_task();
+
+char* TaskArray[]={"MainTask\n","Light Task\n","Temp Task\n","Socket Task\n"};
+void InitializeStruct(int Source, int Dest, char* LogLevel, char* Msg);
+
+#endif
+
+#include "../Includes/LoggingThread.h"
+#include "../Includes/main.h"
+#include "../Includes/UnitTestLog.h"
+//#include "POSIX_Qs.h"
+
+
+double GetTime()
+{
+	struct timeval time;
+
+	gettimeofday(&time, 0);
+
+	return (double)(time.tv_sec)+(((double)(time.tv_usec))/1000000);
+}
+
+uint8_t log_init(char* user_path)
+{
+	FILE *file;
+	file = fopen(user_path, "w");
+	ErrorState error=Success;
+
+	if(file == NULL)
+	{
+		printf("Error opening file! \n");
+		error=FilePtrErr;
+		//exit(1);
+		return error;
+	}
+	
+	fprintf(file,"[%lf] [INFO_LOG]: Successfully created logfile! TID: %ld\n\n", GetTime(), syscall(SYS_gettid));
+	printf("[%lf] [INFO_LOG]: Successfully created logfile! TID: %ld\n\n", GetTime(), syscall(SYS_gettid));
+	
+	fflush(file);
+	fclose(file);
+
+	return error;
+
+}
+
+
+uint8_t log_file(char* user_path, ThreadStruct* StringToSend)
+{
+	FILE *file;
+	file = fopen(user_path, "a");
+	ErrorState error=Success;
+
+	if(file == NULL)
+	{
+		printf("File could not be opend\n");
+		error=FilePtrErr;
+		return error;
+	}
+
+	char* SourceString;
+
+	if((StringToSend->Src)<6)
+		SourceString = ThreadString[StringToSend->Src];
+	else
+	{
+		SourceString = ThreadString[6];
+		error=ValCmpErr;
+	}
+
+
+	char* line;
+	if((StringToSend->Dst)<6)
+	{
+		line = "[%lf] %s(%s): %s\n		L-> Source: '%s'\n\n";
+		fprintf(file, line,GetTime(),ThreadString[StringToSend->Dst], StringToSend->log_level, StringToSend->Message, SourceString);
+		printf(line, GetTime(),ThreadString[StringToSend->Dst], StringToSend->log_level, StringToSend->Message, SourceString);
+	}
+	else
+	{
+		line = "[%lf] %s(%s): %s\n		L-> Source: '%s'\n\n";
+		fprintf(file, line,GetTime(),ThreadString[6],StringToSend->log_level, StringToSend->Message, SourceString);
+		printf(line, GetTime(),ThreadString[6], StringToSend->log_level, StringToSend->Message, SourceString);
+		error=ValCmpErr;
+	}
+
+	fflush(file);
+	fclose(file);
+
+	return error;
+}
+#include "UnitTestLog.c"
+ #include "../Includes/main.h"
+ #include "../Includes/LoggingThread.h"
+ #include "LoggingThread.c"
+
+int pass,fail;
+char* path = "LOG_FILE";
+
+int main(void)
+{
+	FILE* fptr=fopen("unittest.txt","a");
+
+  	printf("\t\t==================================\n");
+  	printf("\t\t||   Logger Unit Testing        ||\n");
+  	printf("\t\t==================================\n");
+
+  	//printf(log_init(fptr);
+  	printf("Error:%d::%s\n",log_init(path),ErrorStates[log_init(path)]);
+	if(log_init(path))fail+=1;
+	else pass+=1;
+
+	// Proper => exepcted error 0
+	 InitializeStruct(1,2,"check","check2");
+	 printf("Error:%d::%s\n",log_file(path,&STRUCT),ErrorStates[log_file(path,&STRUCT)]);
+	 if(log_file(path,&STRUCT))fail+=1;
+	 else pass+=1;
+
+	 /*** ERROR CASES ***/
+
+	 printf("Error:%d::%s\n",log_init(NULL),ErrorStates[log_init(NULL)]);
+	if(log_init(NULL))pass+=1;
+	else fail+=1;
+
+	 InitializeStruct(1,2,"check","check2");
+	 printf("Error:%d::%s\n",log_file(NULL,&STRUCT),ErrorStates[log_file(NULL,&STRUCT)]);
+	 if(log_file(NULL,&STRUCT))pass+=1;
+	 else fail+=1;
+
+	printf("-------------------------------------------------------------------------\n");
+  	printf("Total Test Cases:  %d || Passed Test Cases:  %d || Failed Test Cases:  %d\n",(pass+fail),pass,fail);
+  	printf("-------------------------------------------------------------------------\n");
+
+	
+
+	return 0;
+}
+#include "../Includes/UnitTestLog.h"
+#include "../Includes/LoggingThread.h"
+#include "../Includes/main.h"
+
+
+void InitializeStruct(int Source, int Dest, char* LogLevel, char* Msg)
+{
+	STRUCT.Src=Source;
+	STRUCT.Dst=Dest;
+	strcpy(STRUCT.log_level,LogLevel);
+	strcpy(STRUCT.Message,Msg);
+}
+/*
+*@File:LuxThread.h
+*@Description_File: Header File for Light Sensor
+*@Author:Raj Lavingia and Yash Gupte
+*@Date: 03/26/2018
+*/
+
+#include "main.h"
+
+// Address of light sensor
+
+#define Retry_Score			10
+
+
+// Internal register addresses
+#define Control_Register_Address						0x00
+#define Timing_Register_Address						0x01
+#define Interrupt_Control_register					0x06
+#define Read_Register_ID							0x0A
+
+#define Data0_Lower_Bits						0x0C
+#define Data0_Higher_Bits						0x0D
+#define Data1_Lower_Bits						0x0E
+#define Data1_Higher_Bits						0x0F
+
+#define THresholdLOW					0x02
+#define THresholdLOWHIGH					0x03
+#define THresholdHIGHLOW					0x04
+#define THresholdHIGHHIGH				0x05
+#define Control_Register_start			0x03
+#define Interrupt_Register_Control			0x1F
+
+#define Lux_Set_Gain_High(x)			0x14
+
+#define BUFF_SIZE 						(0x02)
+#define	SIZE_BUFF	sizeof(uint16_t)
+
+//Variables declared
+int File_Descripter_LUX;
+sig_atomic_t flag;
+uint8_t LogKillSafe,AliveThreads,Lux_Error_Retry,Lux_Sensor_State;
+
+//Function Prototypes
+uint8_t lux_common_write(uint8_t* buffedesired_value,int buffer_bytes);
+uint8_t lux_common_read(uint8_t *buffedesired_value,int buffer_bytes);
+uint8_t write_pointer(uint8_t* x);
+uint8_t lux_read_reg(uint8_t* x,uint8_t bytes);
+uint8_t lux_write_reg1(uint8_t* x,uint8_t bytes);
+uint8_t lux_write_reg(uint8_t* x);
+uint8_t Word_Data_Register (uint8_t x);
+uint8_t Command_Write_Register(uint8_t x);
+uint8_t lux_write_register(uint8_t register_addr, uint8_t desired_val);
+uint8_t lux_read_register(uint8_t register_addr, uint8_t* desired_val);
+uint8_t custom_test_lux_config(void);
+uint8_t get_lux(float *lux_final_value);
+uint8_t day_night(float *tem);
+uint8_t lux_initial_sensor(void);
+uint8_t LuxThread_Init(void);
+
+typedef enum{Success=0,Error=1,AddressError=2,AllocError=3,TempNotInUnits=4,TempNotMatch=5}ErrorCodes;
+char* ErrorStates[]={"Success\n","Error\n","Address Error\n","Allocation Error\n","Temperature Unit Error\n","Temperature Not Matching\n"};/*
+*@File:main.h
+*@Description_File: Header File for main function
+*@Author:Raj Lavingia
+*@Date: 03/23/2018
+*/
+
+/*Inclusion of Libraries for main.c*/
+#ifndef MAIN_H_
+#define MAIN_H_
+
+#include <stdio.h>
+#include <math.h> //pow
+#include <float.h>
+#include <complex.h>
+#include <time.h>
+#include <mqueue.h>
+#include <unistd.h>
+#include <string.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <linux/i2c-dev.h>
+#include <assert.h>
+#include <errno.h>
+#include <signal.h>
+#include <malloc.h>
+
+
+
+#endif
+#include "UnitTest.c"
+
+int pass,fail;
+uint8_t array[2]={0};
+uint8_t r_bytes=0x00;
+
+int main(void)
+{
+	pass=0;
+  fail=0;
+  uint8_t variable;
+
+  uint8_t* bufferdesired = &variable; 
+
+  printf("\t\t==================================\n");
+  printf("\t\t||   Lux Unit Testing           ||\n");
+  printf("\t\t==================================\n");
+
+  // 
+  printf("Error:%d::%s\n",lux_common_write(bufferdesired,BUFF_SIZE),ErrorStates[lux_common_write(bufferdesired,BUFF_SIZE)]);
+  if(lux_common_write(bufferdesired,BUFF_SIZE))fail+=1;
+  else pass+=1;
+
+  printf("Error:%d::%s\n",lux_common_read(bufferdesired,BUFF_SIZE),ErrorStates[lux_common_read(bufferdesired,BUFF_SIZE)]);
+  if(lux_common_read(bufferdesired,BUFF_SIZE))fail+=1;
+  else pass+=1;
+
+  printf("Error:%d::%s\n",write_pointer(bufferdesired),ErrorStates[write_pointer(bufferdesired)]);
+  if(write_pointer(bufferdesired))fail+=1;
+  else pass+=1;
+
+  printf("Error:%d::%s\n",lux_read_reg(bufferdesired,2),ErrorStates[lux_read_reg(bufferdesired,2)]);
+  if(lux_read_reg(bufferdesired,2))fail+=1;
+  else pass+=1; //THigh_register, final_threshold_high
+
+  printf("Error:%d::%s\n",lux_write_reg1(bufferdesired, r_bytes),ErrorStates[lux_write_reg1(bufferdesired, r_bytes)]);
+  if(lux_write_reg1(bufferdesired, r_bytes))fail+=1;
+  else pass+=1; //main_read_registe
+
+  printf("Error:%d::%s\n",lux_write_reg(bufferdesired),ErrorStates[lux_write_reg(bufferdesired)]);
+  if(lux_write_reg(bufferdesired))fail+=1;
+  else pass+=1; //main_read_registe //Word_Data_Register
+
+
+ //  ** CASES WITH ERROR **
+
+ // 
+  printf("Error:%d::%s\n",lux_common_write(NULL,BUFF_SIZE),ErrorStates[lux_common_write(NULL,BUFF_SIZE)]);
+  if(lux_common_write(NULL,BUFF_SIZE))pass+=1;
+  else fail+=1;
+
+  printf("Error:%d::%s\n",lux_common_read(NULL,BUFF_SIZE),ErrorStates[lux_common_read(NULL,BUFF_SIZE)]);
+  if(lux_common_read(NULL,BUFF_SIZE))pass+=1;
+  else fail+=1;
+
+  printf("Error:%d::%s\n",write_pointer(NULL),ErrorStates[write_pointer(NULL)]);
+  if(write_pointer(NULL))pass+=1;
+  else fail+=1;
+
+  printf("Error:%d::%s\n",lux_read_reg(NULL,2),ErrorStates[lux_read_reg(NULL,2)]);
+  if(lux_read_reg(NULL,2))pass+=1;
+  else fail+=1;
+
+  printf("Error:%d::%s\n",lux_write_reg1(NULL, r_bytes),ErrorStates[lux_write_reg1(NULL, r_bytes)]);
+  if(lux_write_reg1(NULL, r_bytes))pass+=1;
+  else fail+=1;
+
+  printf("Error:%d::%s\n",lux_write_reg(NULL),ErrorStates[lux_write_reg(NULL)]);
+  if(lux_write_reg(NULL))pass+=1;
+  else fail+=1;//Word_Data_Register
+
+
+  printf("-------------------------------------------------------------------------\n");
+  printf("Total Test Cases:  %d || Passed Test Cases:  %d || Failed Test Cases:  %d\n",(pass+fail),pass,fail);
+  printf("-------------------------------------------------------------------------\n");
+
+
+  return 0;
+}#include "../Includes/LuxThread.h"
+#include "../Includes/main.h"
+//#include "POSIX_Qs.h"
+
+//pthread mutex lock used for locking unlocking of data
+pthread_mutex_t lock;
+
+uint8_t Lux_Warning = 0x02;
+
+//Function For Base register write
+uint8_t lux_common_write(uint8_t* buffedesired_value,int buffer_bytes)
+{
+  //Go and write to a particular location, store value in temp var
+   if(buffedesired_value==NULL)
+    return AllocError;
+ 
+  return Success;
+}
+
+//Function for base register read
+uint8_t lux_common_read(uint8_t *buffedesired_value,int buffer_bytes)
+{      //Go and read from the particular location
+   if(buffedesired_value==NULL)
+    return AllocError;
+  if(sizeof(buffedesired_value)<SIZE_BUFF)
+    return Error;
+  return Success;
+}
+
+uint8_t write_pointer(uint8_t* x)
+{
+    //int lux = lux_common_write(x,1);      //Check if the temp value is returned success by the base reg Write_Register_Pointer
+    //if not equal to 0 return fail
+   uint8_t buffer_bytes = 1;
+   uint8_t lux = lux_common_write(x,buffer_bytes);
+   return lux;
+}
+
+//Lux read
+uint8_t lux_read_reg(uint8_t* x,uint8_t bytes)
+{
+    uint8_t lux = lux_common_read(x,bytes);
+    return lux;
+}
+//While sending bytes in write send 3 bytyes, lower 8, higher 8 and base address
+uint8_t lux_write_reg1(uint8_t* x,uint8_t bytes)
+{
+   //if return not equal to 0 the return fail
+    int lux = lux_common_write(x,bytes);
+    if(lux!=0)
+    {
+      return 1;
+    }
+    else
+    {            //if equal to 0 then return success
+      return 0;
+    }
+
+}
+//While sending bytes in write send 3 bytyes, lower 8, higher 8 and base address
+uint8_t lux_write_reg(uint8_t* x)
+{
+       //if return not equal to 0 the return fail
+    int lux = lux_common_write(x,1);
+    if(lux!=0)
+    {
+      return 1;
+    }
+    else
+    {            //if equal to 0 then return success
+      return 0;
+    }
+
+}
+
+/*
+*@File:main.h
+*@Description_File: Header File for main function
+*@Author:Raj Lavingia
+*@Date: 03/23/2018
+*/
+
+/*Inclusion of Libraries for main.c*/
+#ifndef MAIN_H_
+#define MAIN_H_
+
+#include <stdio.h>
+#include <math.h> //pow
+#include <float.h>
+#include <complex.h>
+#include <time.h>
+#include <mqueue.h>
+#include <unistd.h>
+#include <string.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <fcntl.h>
+#include <linux/i2c-dev.h>
+#include <assert.h>
+#include <errno.h>
+#include <signal.h>
+#include <malloc.h>
+
+
+#endif/*
+*@File:temp_task.h
+*@Description_File: Header File for Temperature Sensor
+*@Author:Raj Lavingia and Yash Gupte
+*@Date: 03/23/2018
+*/
+
+//Includes
+#include "main.h"
+
+//Macros Defined
+#define Threshold_upper_Limit 			(30)
+#define Threshold_lower_Limit 			(10)
+#define Address_I2C        			(0x48)
+#define Base_Temperature    			(0x00)
+#define Above_Threshold       		 	(0x01)
+#define Below_Threshold        			(0x02)
+#define TLow_register            		(0x02)
+#define THigh_register        			(0x03)
+#define Base_Config_register        		(0x01)
+#define Configuration_Register_Default_1        (0x6080)
+#define Configuration_Register_Default_2        (0x60A0)
+#define SM_MODE_ON        			(0x6180)
+#define Fault_Bits_Read        			(0x7880)
+#define EM_Mode_ON      			(0x6090)
+#define CR_MODE_ON        			(0x6040)
+#define Retry_Mode_ON				(10)
+#define Temp_No_Retry				(0)
+#define data_register_read			(0x00)
+
+
+//Variables Defined
+
+sig_atomic_t flag;
+uint8_t LogKillSafe,AliveThreads,IF_RETRY,Present_Temp_Sensor_Output;
+
+int File_Descriptor;
+
+//Function Prototypes
+uint8_t base_reg_write(uint8_t* buffer_value,int buffer_bytes);		// Common base register for writing to Thigh,Tlow and config.
+void * TempThread(void * args);						// Individual temp queue is made and communicated with all the remaning threads. Also checks for kill command from USR1 or USR2.If socket client asks for temperature in any unit, this thread returns that specific unit (C,F,K)
+uint8_t base_reg_read(uint8_t *buffer_value,int buffer_bytes);		// Common base register for reading Thigh,Tlow and config.
+uint8_t write_reg_ptr(uint8_t* x);					 
+uint8_t temp_read_reg(uint8_t* x);
+uint8_t temp_write_reg(uint8_t* x);
+uint8_t main_write_register(uint8_t register_addr, uint16_t desired_val); //Register addr must be between(0x01-0x03).Common base funciton for all registers (writing purpose), sends a buffer to the register through file descriptor.
+uint8_t main_read_register(uint8_t register_addr, uint8_t* desired_val); //Register addr must be between(0x01-0x03).Common base funciton for all registers (writing purpose), sends a buffer to the register through file descriptor. Reads whole buffer through file-descriptor and prints two 8 bit numbers.(LSB,MSB)
+uint8_t all_registers_check(void);					// Thigh and Tlow are written and read according to threshold set.
+uint8_t config_register_temperature(void);				// Bits of config reg are written and read for purposes like shutdown mode, fault bits - em mode and cr(conversion rate) mode
+uint8_t get_temp(float *t_data);					// Calculations are done in order to get a temp value in float in C,K or F from adc. Also checks id measured temo is above or below threshold.
+uint8_t temp_initial_sensor(void);					// Starts temp sensor by openening I2C bus and checks slave addresses of I2C. 
+uint8_t BIST_Temp_Check(void);						// BIST is performed.
+#include <errno.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <assert.h>
+#include <linux/i2c-dev.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
+#include <stdint.h>
+#include <mqueue.h>
+
+#define celsius 0
+#define kelvin 1
+#define fehrenheit 2
+#define bus  (char*)"/dev/i2c-2" //path in bbg
+#define addrabc (0x48)
+#define	BUFF_SIZE	(0x02)
+#define	SIZE_BUFF	sizeof(uint16_t)
+//float c,k,f; //for temperature variations
+//int buffer_value; //buffer in which value is put
+int ret_ioctl; //return for ret_ioctl
+int ret_write_register; //return for write rgeister
+int ret_write_lower_register; //return for write lower reg
+int temp3;
+unsigned char MSB, LSB;
+
+typedef enum{Success=0,Error=1,AddressError=2,AllocError=3,TempNotInUnits=4,TempNotMatch=5}ErrorCodes;
+char* ErrorStates[]={"Success\n","Error\n","Address Error\n","Allocation Error\n","Temperature Unit Error\n","Temperature Not Matching\n"};
+uint8_t final_read_temperature(int temperature_unit,int MSB,int LSB,float calculated);
+#include "UnitTest.c"
+
+int pass,fail;
+uint8_t array[2]={0};
+
+int main(void)
+{
+	pass=0;
+  fail=0;
+  uint8_t variable;
+
+  uint8_t* bufferdesired = &variable; 
+
+  printf("\t\t==================================\n");
+  printf("\t\t||   Temperature Unit Testing   ||\n");
+  printf("\t\t==================================\n");
+
+  // 
+  printf("Error:%d::%s\n",base_reg_write(bufferdesired,BUFF_SIZE),ErrorStates[base_reg_write(bufferdesired,BUFF_SIZE)]);
+  if(base_reg_write(bufferdesired,BUFF_SIZE))fail+=1;
+  else pass+=1;
+
+  printf("Error:%d::%s\n",base_reg_read(bufferdesired,BUFF_SIZE),ErrorStates[base_reg_read(bufferdesired,BUFF_SIZE)]);
+  if(base_reg_read(bufferdesired,BUFF_SIZE))fail+=1;
+  else pass+=1;
+
+  printf("Error:%d::%s\n",write_reg_ptr(bufferdesired),ErrorStates[write_reg_ptr(bufferdesired)]);
+  if(write_reg_ptr(bufferdesired))fail+=1;
+  else pass+=1;
+
+  printf("Error:%d::%s\n",temp_read_reg(bufferdesired),ErrorStates[temp_read_reg(bufferdesired)]);
+  if(temp_read_reg(bufferdesired))fail+=1;
+  else pass+=1; //THigh_register, final_threshold_high
+
+  uint16_t final_threshold_high = Threshold_upper_Limit << 8;
+  printf("Error:%d::%s\n",main_write_register(THigh_register, final_threshold_high),ErrorStates[main_write_register(THigh_register, final_threshold_high)]);
+  if(main_write_register(THigh_register, final_threshold_high))fail+=1;
+  else pass+=1; //main_read_registe
+
+  static uint8_t Register_buffer_storage[2];
+  printf("Error:%d::%s\n",main_read_register(THigh_register, &Register_buffer_storage[0]),ErrorStates[main_read_register(THigh_register, &Register_buffer_storage[0])]);
+  if(main_read_register(THigh_register,&Register_buffer_storage[0]))fail+=1;
+  else pass+=1;
+
+  //uint16_t final_threshold_high = Threshold_upper_Limit << 8;
+  printf("Error:%d::%s\n",all_registers_check(),ErrorStates[all_registers_check()]);
+  if(all_registers_check())fail+=1;
+  else pass+=1; //final_read_temperature
+
+  printf("Error:%d::%s\n",final_read_temperature(celsius,0x55,0x51,85.312500),ErrorStates[final_read_temperature(celsius,0x55,0x51,85.31250)]);
+  if(final_read_temperature(celsius,0x55,0x51,85.31250))fail+=1;
+  else pass+=1;
+
+  /*** CASES WITH ERROR ***/
+
+  printf("Error:%d::%s\n",base_reg_write(NULL,BUFF_SIZE),ErrorStates[base_reg_write(NULL,BUFF_SIZE)]);
+  if(base_reg_write(NULL,BUFF_SIZE))pass+=1;
+  else fail+=1;
+
+  printf("Error:%d::%s\n",base_reg_read(NULL,BUFF_SIZE),ErrorStates[base_reg_read(NULL,BUFF_SIZE)]);
+  if(base_reg_read(NULL,BUFF_SIZE))pass+=1;
+  else fail+=1;
+
+  printf("Error:%d::%s\n",write_reg_ptr(NULL),ErrorStates[write_reg_ptr(NULL)]);
+  if(write_reg_ptr(NULL))pass+=1;
+  else fail+=1;
+
+  printf("Error:%d::%s\n",temp_read_reg(NULL),ErrorStates[temp_read_reg(NULL)]);
+  if(temp_read_reg(NULL))pass+=1;
+  else fail+=1;
+
+ // final_threshold_high = 1 << 8;
+  printf("Error:%d::%s\n",main_write_register(0x45, final_threshold_high),ErrorStates[main_write_register(0x45, final_threshold_high)]);
+  if(main_write_register(0x45, final_threshold_high))pass+=1;
+  else fail+=1;
+
+  printf("Error:%d::%s\n",final_read_temperature(4,0x55,0x51,85.312500),ErrorStates[final_read_temperature(4,0x55,0x51,85.31250)]);
+  if(final_read_temperature(4,0x55,0x51,85.31250))pass+=1;
+  else fail+=1;
+
+  printf("Error:%d::%s\n",final_read_temperature(celsius,0x55,0x51,30.0),ErrorStates[final_read_temperature(celsius,0x55,0x51,30.0)]);
+  if(final_read_temperature(celsius,0x55,0x51,30.0))pass+=1;
+  else fail+=1;
+
+  printf("-------------------------------------------------------------------------\n");
+  printf("Total Test Cases:  %d || Passed Test Cases:  %d || Failed Test Cases:  %d\n",(pass+fail),pass,fail);
+  printf("-------------------------------------------------------------------------\n");
+
+
+  return 0;
+}//Include temperature task header file from Include Folder
+#include "../Includes/UnitTestTemp.h"
+#include "../Includes/TempThread.h"
+#include "../Includes/main.h"
+
+
+uint8_t buffer_value;
+uint8_t v[2]={0};
+
+uint8_t base_reg_write(uint8_t* bufferedesired,int buffer_bytes) //
+{
+  if(bufferedesired==NULL)
+    return AllocError;
+ 
+  return Success;
+}
+
+uint8_t base_reg_read(uint8_t* bufferedesired,int buffer_bytes) //
+{
+  if(bufferedesired==NULL)
+    return AllocError;
+  if(sizeof(bufferedesired)<SIZE_BUFF)
+    return Error;
+  return Success;
+}
+
+uint8_t write_reg_ptr(uint8_t* x) //
+{
+  uint8_t buffer_bytes = 1;
+  uint8_t temp = base_reg_write(x,buffer_bytes);
+  if(buffer_bytes!=BUFF_SIZE-1)
+    return Error;
+  return temp;
+}
+
+
+uint8_t temp_read_reg(uint8_t *x) //
+{
+  uint8_t buffer_bytes = 2 ;
+  uint8_t temp = base_reg_read(x,2);
+  if(buffer_bytes!=BUFF_SIZE)
+    return Error;
+  return temp;
+}
+
+uint8_t temp_write_reg(uint8_t *x) //
+{
+  uint8_t buffer_bytes = 3;
+  uint8_t temp = base_reg_write(x,buffer_bytes);
+  if(buffer_bytes!=BUFF_SIZE+1)
+    return Error;
+  return temp;
+}
+
+uint8_t main_write_register(uint8_t register_addr, uint16_t desired_val)
+{
+  //Sent_Queue(Temp, Logging, "[INFO]", "Main Write Register Pass in second attempt\n");
+  //register addr is the respective base address and desired value is the value you want to write in that registe
+  uint8_t buffer_array[3]={register_addr,desired_val>>8,desired_val & 0x00FF};
+  int temp = ((register_addr < 0x01) || (register_addr > 0x03));
+  if(temp)
+    {
+      printf("[Error] In register addressing\n");
+      return 1;
+    }
+  temp = (write_reg_ptr(&register_addr));
+  if(temp)
+    {
+         printf("[Error] In writing to register\n");
+      return temp;
+    }
+  temp = (temp_write_reg(&buffer_array));
+  if(temp)
+    {
+      printf("[Error]In writing to temp\n");
+      return temp;
+    }
+    return Success;
+}
+
+//Common Custom function for all registers check for reading data to register
+uint8_t main_read_register(uint8_t register_addr, uint8_t* desired_val)
+{
+  int temp = (write_reg_ptr(&register_addr));
+  if(temp)
+    {
+      printf("[Error]In writing to register\n");
+      return 1;
+    }
+  temp = (temp_read_reg(desired_val));
+  if(temp)
+    {
+      printf("[Error]In reading from register");
+      return 1;
+    }
+  //  Sent_Queue(Temp, Logging, "[INFO]", "Main Read Register Pass\n");
+    return 0;
+}
+
+uint8_t all_registers_check(void)
+{
+        static uint8_t Register_buffer_storage[2];
+        uint16_t final_threshold_high = Threshold_upper_Limit << 8;
+        int temp = (main_write_register(THigh_register, final_threshold_high));
+        if(temp)
+        {
+          printf("[Error]Thigh not written \n");
+          return 1;
+        }
+        temp=(main_read_register(THigh_register, &Register_buffer_storage[0]));
+        if(temp)
+        {
+          printf("[Error]Thigh not read \n");
+          return 1;
+        }
+
+        temp = (main_write_register(TLow_register, Threshold_lower_Limit << 8));
+        if(temp)
+        {
+          printf("[Error]Tlow not written \n");
+          return 1;
+        }
+
+        if(main_read_register(TLow_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]Tlow not read \n");
+          return 1;
+        }
+  //
+        return 0;
+}
+
+uint8_t final_read_temperature(int temperature_unit,int MSB,int LSB,float calculated)
+{
+    int c = ((MSB << 8) | LSB) >> 4; 
+    float temp;
+    switch(temperature_unit)
+    {
+      case celsius:
+        temp = c*0.0625;
+        if(temp == calculated)
+        return Success;
+      return Error;
+        break;
+
+      case fehrenheit:
+        temp = (1.8 * c) + 32;
+        if(temp == calculated)
+        return Success;
+      return Error;
+        break;
+
+      case kelvin:
+         temp = c + 273.15;
+         if(temp == calculated)
+        return Success;
+      return Error;
+        break;
+
+        default: return TempNotInUnits;
+        break;
+    }
+
+   
+    
+}
+/*
+*@File:temp_task.c
+*@Description_File: C File for Temperature Sensor
+*@Author:Raj Lavingia and Yash Gupte
+*@Date: 03/23/2018
+*/
+#include "../Include/UnitTestTemp.h"
+#include "POSIX_Qs.h"
+#include "main.h"
+
+//pthread mutex lock used for locking unlocking of data
+pthread_mutex_t lock;
+
+uint8_t Warning_LED_Indicator = Base_Temperature;
+
+
+//Function For Base register write
+uint8_t base_reg_write(uint8_t* buffedesired_value,int buffer_bytes)
+{
+        //Go and write to a particular location, store value in temp var
+    int temp=write(File_Descriptor, buffedesired_value, buffer_bytes);
+        //Check if temp is equla to bytes read or not
+    if(temp!=buffer_bytes)
+    {
+            
+      return 1;
+    }
+    else
+    {
+            
+      return 0;
+    }
+}
+
+//Function for base register read
+uint8_t base_reg_read(uint8_t *buffedesired_value,int buffer_bytes)
+{
+      
+    int temp =read(File_Descriptor, buffedesired_value, buffer_bytes);
+        
+    if(temp!=buffer_bytes)
+    {
+            
+      return 1;
+    }
+    else
+    {
+           
+      printf("\n Read value is %d \n",*buffedesired_value);
+      return 0;
+    }
+}
+
+uint8_t write_reg_ptr(uint8_t* x)
+{
+      
+    int temp = base_reg_write(x,1);
+          
+    if(temp!=0)
+    {
+            
+      return 1;
+    }
+    else
+    {
+      return 0;
+    }
+}
+
+uint8_t temp_read_reg(uint8_t* x)
+{
+      
+    uint8_t temp = base_reg_read(x,2);
+    if(temp!=0)
+    {
+      return 1;
+    }
+    else
+    {
+      
+      return 0;
+    }
+}
+
+
+uint8_t temp_write_reg(uint8_t* x)
+{
+        
+
+    int temp = base_reg_write(x,3);
+    if(temp!=0)
+    {
+      return 1;
+    }
+
+    else
+    {
+            
+
+      return 0;
+    }
+
+}
+
+
+
+uint8_t main_write_register(uint8_t register_addr, uint16_t desired_val)
+{
+  
+
+    uint8_t buffer_array[3]={register_addr,desired_val>>8,desired_val & 0x00FF};
+  int temp = ((register_addr < 0x01) || (register_addr > 0x03));
+  if(temp)
+    {
+      printf("[Error] In register addressing\n");
+      return 1;
+    }
+  temp = (write_reg_ptr(&register_addr));
+  if(temp)
+    {
+         printf("[Error] In writing to register\n");
+      return 1;
+    }
+  temp = (temp_write_reg(&buffer_array));
+  if(temp)
+    {
+      printf("[Error]In writing to temp\n");
+      return 1;
+    }
+    return 0;
+}
+
+
+
+uint8_t main_read_register(uint8_t register_addr, uint8_t* desired_val)
+{
+  int temp = (write_reg_ptr(&register_addr));
+  if(temp)
+    {
+      printf("[Error]In writing to register\n");
+      return 1;
+    }
+  temp = (temp_read_reg(desired_val));
+  if(temp)
+    {
+      printf("[Error]In reading from register");
+      return 1;
+    }
+ 
+
+    return 0;
+}
+
+
+uint8_t all_registers_check(void)
+{
+        static uint8_t Register_buffer_storage[2];
+        uint16_t final_threshold_high = Threshold_upper_Limit << 8;
+        int temp = (main_write_register(THigh_register, final_threshold_high));
+        if(temp)
+        {
+          printf("[Error]Thigh not written \n");
+          return 1;
+        }
+        temp=(main_read_register(THigh_register, &Register_buffer_storage[0]));
+        if(temp)
+        {
+          printf("[Error]Thigh not read \n");
+          return 1;
+        }
+
+        temp = (main_write_register(TLow_register, Threshold_lower_Limit << 8));
+        if(temp)
+        {
+          printf("[Error]Tlow not written \n");
+          return 1;
+        }
+
+        if(main_read_register(TLow_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]Tlow not read \n");
+          return 1;
+        }
+
+
+        return 0;
+}
+
+
+
+uint8_t config_register_temperature(void)
+{
+        static uint8_t Register_buffer_storage[2];
+        static char Text_Log_Printed[150];
+
+        if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]Config Register not written properly\n");
+          return 1;
+        }
+
+        Sent_Queue(Temp, Logging, "[INFO]", "\nConfig Test Success\n");
+
+        if(main_write_register(Base_Config_register, SM_MODE_ON))
+        {
+          printf("[Error]SM Mode On write\n");
+          return 1;
+        }
+
+        if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]SM Mode On read\n");
+          return 1;
+        }
+
+        if(main_write_register(Base_Config_register, Fault_Bits_Read))
+        {
+          printf("[Error]Fault Bits write");
+          return 1;
+        }
+
+              if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]Fault Bits read");
+          return 1;
+        }
+
+              if(main_write_register(Base_Config_register, EM_Mode_ON))
+        {
+          printf("[Error]EM On write");
+          return 1;
+        }
+
+        if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          printf("[Error]EM On read");
+          return 1;
+        }
+
+            if(main_write_register(Base_Config_register, CR_MODE_ON))
+        {
+          printf("[Error]CR On write");
+          return 1;
+        }
+
+        if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
+        {
+          Error_Data(Temp, "Error in Reading Base register", ENOMSG, Log_Native);
+            return 1;
+        }
+
+    
+        return 0;
+}
+
+
+
+uint8_t get_temp(float *final_temp_data_stored)
+{
+        static uint8_t Register_buffer_storage[2];
+        int temp = (main_read_register(data_register_read, &Register_buffer_storage[0]));
+        if(temp)
+        {
+          Error_Data(Temp, "Register read fail\n", ENOMSG, Log_Native);
+          return 1;
+        }
+        *final_temp_data_stored = ((Register_buffer_storage[0] << 8) | Register_buffer_storage[1]) >> 4;
+        *final_temp_data_stored *= 0.0625;
+        printf( "Generated Temp Value : %f",*final_temp_data_stored );
+        
+
+        if(*final_temp_data_stored < Threshold_lower_Limit)
+        {
+          Sent_Queue(Temp, Logging, "[INFO]", "\nValue is below threshold\n");
+          Warning_LED_Indicator = Below_Threshold;
+        }
+        else if(*final_temp_data_stored > Threshold_upper_Limit)
+        {
+          Sent_Queue(Temp, Logging, "[INFO]", "\nValue is Above threshold\n");
+          Warning_LED_Indicator = Above_Threshold;
+        }
+        else
+        {
+          Sent_Queue(Temp, Logging, "[INFO]", "\nValue is equals threshold\n");
+          Warning_LED_Indicator = Base_Temperature;
+        }
+                printf( "temp value : %f",*final_temp_data_stored );
+              return 0;
+}
+
+
+uint8_t temp_initial_sensor(void)
+{
+        
+        File_Descriptor = open(I2C_BUS, O_RDWR);
+        if(File_Descriptor <0)
+        {
+                Error_Data(Temp, "open(): I2C Bus", errno, Log_Native);
+                return 1;
+        }
+        if(ioctl(File_Descriptor, I2C_SLAVE, Address_I2C) <0)
+        {
+                Error_Data(Temp, "ioctl(): I2C Bus", errno, Log_Native);
+                return 1;
+        }
+      
+        return 0;
+}
+
+
+uint8_t BIST_Temp_Check(void)
+{
+    printf("\n In temp check function");
+        char data_print[60];
+        sprintf(data_print, "[INFO]Temperature Thread Created Successfully with TID: %ld\n", syscall(SYS_gettid));
+    Sent_Queue(Temp, Logging, "[INFO]", data_print);
+        sprintf(data_print, "[INFO]PID: %ld\n", syscall(SYS_getpid));
+    Sent_Queue(Temp, Logging, "[INFO]", data_print);
+
+        pthread_mutex_lock(&lock);
+
+    int temp = temp_initial_sensor();
+        if(temp != 0)
+        {
+      printf("\n Sensor not initilised");
+            Error_Data(Temp, "[Error]Temperataure sensor not initialised \n", ENOMSG, Log_Native);
+            pthread_mutex_unlock(&lock);
+            return 1;
+        }
+    else
+    {
+      printf("\n in success loop");
+      Sent_Queue(Temp, Logging, "INFO", "\nTemperature Sensor Initiliazed Successfully\n");
+    }
+
+        int temp1 = main_write_register(Base_Config_register, Configuration_Register_Default_1);
+        if(temp1 != 0)
+        {
+      printf("\n reset successfullu not done");
+            Error_Data(Temp, "[Error]Sensor Not reset properly\n", ENOMSG, Log_Native);
+            pthread_mutex_unlock(&lock);
+            return 1;
+        }
+    else
+    {
+      printf("\n reset successfullu done");
+      Sent_Queue(Temp, Logging, "INFO", "\nReset Successfully\n");
+    }
+
+    int temp2 = all_registers_check();
+        if(temp2 !=0)
+        {
+          Error_Data(Temp, "[Error]All registers not checked successfully\n", ENOMSG, Log_Native);
+            pthread_mutex_unlock(&lock);
+            return 1;
+        }
+        else
+        {
+      printf("Register OK\n");
+      Sent_Queue(Temp, Logging, "[INFO]", "\nAll registers check Successfully\n");
+        }
+
+        int temp3 = config_register_temperature();
+        if(temp3 != 0)
+        {
+            Error_Data(Temp, "[Error]BST not success\n", ENOMSG, Log_Native);
+            pthread_mutex_unlock(&lock);
+            return 1;
+        }
+        else
+        {
+      printf("Bist Pass\n");
+            Sent_Queue(Temp, Logging, "[INFO]", "Built In Success\n");
+        }
+
+         pthread_mutex_unlock(&lock);
+     printf("Normal function\n");
+        
+
+    return 0;
+
+}
+void bist()
+{
+  uint8_t temp1;
+  
+  temp1 = BIST_Temp_Check();
+  printf("\n success value is %d",temp1);
+  if(temp1)
+  {
+    printf("\n inital temp check not success");
+    Error_Data(Temp, "Error while Initializing Temperature Sensor", ENOMSG, Log_Native);
+    IF_RETRY = Retry_Mode_ON;
+    Present_Temp_Sensor_Output = Sensor_Offline;
+  }
+  else
+  {
+    printf("\n inital temp check  success");
+    IF_RETRY = 0;
+    Present_Temp_Sensor_Output = Sensor_Online;
+  }
+}
