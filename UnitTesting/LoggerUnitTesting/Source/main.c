@@ -20,7 +20,7 @@ int main(void)
 	else pass+=1;
 
 	// Proper => exepcted error 0
-	 InitializeStruct(Main,Logging,"check","check2");
+	 InitializeStruct(1,2,"check","check2");
 	 printf("Error:%d::%s\n",log_file(path,&STRUCT),ErrorStates[log_file(path,&STRUCT)]);
 	 if(log_file(path,&STRUCT))fail+=1;
 	 else pass+=1;
@@ -31,7 +31,7 @@ int main(void)
 	if(log_init(NULL))pass+=1;
 	else fail+=1;
 
-	 InitializeStruct(Main,Logging,"check","check2");
+	 InitializeStruct(1,2,"check","check2");
 	 printf("Error:%d::%s\n",log_file(NULL,&STRUCT),ErrorStates[log_file(NULL,&STRUCT)]);
 	 if(log_file(NULL,&STRUCT))pass+=1;
 	 else fail+=1;

@@ -55,8 +55,8 @@ uint8_t log_file(char* user_path, ThreadStruct* StringToSend)
 
 	char* SourceString;
 
-	if((StringToSend->Source)<6)
-		SourceString = ThreadString[StringToSend->Source];
+	if((StringToSend->Src)<6)
+		SourceString = ThreadString[StringToSend->Src];
 	else
 	{
 		SourceString = ThreadString[6];
@@ -65,17 +65,17 @@ uint8_t log_file(char* user_path, ThreadStruct* StringToSend)
 
 
 	char* line;
-	if((StringToSend->Dest)<6)
+	if((StringToSend->Dst)<6)
 	{
 		line = "[%lf] %s(%s): %s\n		L-> Source: '%s'\n\n";
-		fprintf(file, line,GetTime(),ThreadString[StringToSend->Dest], StringToSend->LogLevel, StringToSend->Msg, SourceString);
-		printf(line, GetTime(),ThreadString[StringToSend->Dest], StringToSend->LogLevel, StringToSend->Msg, SourceString);
+		fprintf(file, line,GetTime(),ThreadString[StringToSend->Dst], StringToSend->log_level, StringToSend->Message, SourceString);
+		printf(line, GetTime(),ThreadString[StringToSend->Dst], StringToSend->log_level, StringToSend->Message, SourceString);
 	}
 	else
 	{
 		line = "[%lf] %s(%s): %s\n		L-> Source: '%s'\n\n";
-		fprintf(file, line,GetTime(),ThreadString[6],StringToSend->LogLevel, StringToSend->Msg, SourceString);
-		printf(line, GetTime(),ThreadString[6], StringToSend->LogLevel, StringToSend->Msg, SourceString);
+		fprintf(file, line,GetTime(),ThreadString[6],StringToSend->log_level, StringToSend->Message, SourceString);
+		printf(line, GetTime(),ThreadString[6], StringToSend->log_level, StringToSend->Message, SourceString);
 		error=ValCmpErr;
 	}
 

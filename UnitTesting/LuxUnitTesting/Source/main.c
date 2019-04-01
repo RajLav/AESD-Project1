@@ -41,14 +41,6 @@ int main(void)
   if(lux_write_reg(bufferdesired))fail+=1;
   else pass+=1; //main_read_registe //Word_Data_Register
 
-   printf("Error:%d::%s\n",Word_Data_Register(r_bytes),ErrorStates[Word_Data_Register(r_bytes)]);
-  if(Word_Data_Register(r_bytes))fail+=1;
-  else pass+=1; //Command_Write_Register
-
-  printf("Error:%d::%s\n",Command_Write_Register(r_bytes),ErrorStates[Command_Write_Register(r_bytes)]);
-  if(Command_Write_Register(r_bytes))fail+=1;
-  else pass+=1;
-
 
  //  ** CASES WITH ERROR **
 

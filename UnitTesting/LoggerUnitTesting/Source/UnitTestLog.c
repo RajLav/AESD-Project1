@@ -5,8 +5,8 @@
 
 void InitializeStruct(int Source, int Dest, char* LogLevel, char* Msg)
 {
-	STRUCT.Source=Source;
-	STRUCT.Dest=Dest;
-	strcpy(STRUCT.LogLevel,LogLevel);
-	strcpy(STRUCT.Msg,Msg);
+	STRUCT.Src=Source;
+	STRUCT.Dst=Dest;
+	strcpy(STRUCT.log_level,LogLevel);
+	strcpy(STRUCT.Message,Msg);
 }
