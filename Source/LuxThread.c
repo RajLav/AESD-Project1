@@ -7,7 +7,6 @@
 
 #include "LuxThread.h"
 #include "main.h"
-#include "POSIX_Qs.h"
 
 //pthread mutex lock used for locking unlocking of data
 pthread_mutex_t lock;
@@ -22,6 +21,7 @@ uint8_t lux_common_write(uint8_t* buffedesired_value,int buffer_bytes)
     //Check if Lux is equla to bytes read or not
     if(lux!=buffer_bytes)
     {            //if not then return fail
+      Error_Data(Lux, "[ERROR]Bytes do not match!\n", errno, LOG_LINUX);
       return 1;
     }
     else
@@ -37,11 +37,12 @@ uint8_t lux_common_read(uint8_t *buffedesired_value,int buffer_bytes)
     //check if temp is equal to bytes read
     if(lux!=buffer_bytes)
     {            //if not then return fail
+      Error_Data(Lux, "[ERROR]Bytes do not match!\n", errno, LOG_LINUX);
       return 1;
     }
     else
     {            //if true, then write the value which is read and return pass
-			printf("\n Read value is %d \n",*buffedesired_value);
+			printf("[INFO]Read value is %d \n",*buffedesired_value);
       return 0;
     }
 }
@@ -52,7 +53,7 @@ uint8_t write_pointer(uint8_t* x)
     //if not equal to 0 return fail
     if(lux!=0)
     {
-      //if equal to 0 then let this function retrun 0
+      Error_Data(Lux, "[ERROR]Retrun !=0 !\n", errno, LOG_LINUX);
       return 1;
     }
     else
@@ -67,6 +68,7 @@ uint8_t lux_read_reg(uint8_t* x,uint8_t bytes)
     uint8_t lux = lux_common_read(x,bytes);
     if(lux!=0)      //if equal to anything else then return 1
     {
+       Error_Data(Lux, "[ERROR]Retrun !=0 !\n", errno, LOG_LINUX);
       return 1;
     }
     else      //if equal to 0 then return success
@@ -81,6 +83,7 @@ uint8_t lux_write_reg1(uint8_t* x,uint8_t bytes)
     int lux = lux_common_write(x,bytes);
     if(lux!=0)
     {
+      Error_Data(Lux, "[ERROR]Retrun !=0 !\n", errno, LOG_LINUX);
       return 1;
     }
     else
@@ -96,6 +99,7 @@ uint8_t lux_write_reg(uint8_t* x)
     int lux = lux_common_write(x,1);
     if(lux!=0)
     {
+      Error_Data(Lux, "[ERROR]Retrun !=0 !\n", errno, LOG_LINUX);
       return 1;
     }
     else
@@ -104,53 +108,32 @@ uint8_t lux_write_reg(uint8_t* x)
     }
 
 }
-uint8_t Word_Data_Register (uint8_t x)
-{
-  int temp = (x & 0x0F | 0x0A);
-  if(temp)
-  {
-    return 1;
-  }
-  else
-  {
-    return 0;
-  }
-}
-uint8_t Command_Write_Register(uint8_t x)
-{
-  int temp =  ((x & 0x0F) | 0x80);
-  if(temp)
-  {
-    return 1;
-  }
-  else
-  {
-    return 0;
-  }
-}
+
 //Common Custom function for all registers check for writing data to register
 uint8_t lux_write_register(uint8_t register_addr, uint8_t desired_val)
 {
 		uint8_t lux_data_write = 0;
     int a = 1;
-		lux_data_write = Command_Write_Register(register_addr);
+		lux_data_write = Lux_Command_Word_Data(register_addr);
     //Defined Register Address
-    int temp = ((register_addr ==0x07) || (register_addr == 0x09) || (register_addr == 0x09) || (register_addr == 0x0B));
+    int temp = ((register_addr ==0x07) || (register_addr == 0x08) || (register_addr == 0x09) || (register_addr == 0x0B));
     if(temp)
     {
 			printf("[Error_Lux]Register Address wrong\n");
+			Error_Data(Lux, "[ERROR]Register Address wrong!\n", errno, LOG_LINUX);
 			return 1;
 		}
     //writing to specific register
 		if(lux_write_reg(&lux_data_write))
 		{
-			printf("Lux Write Fail\n");
+			printf("[ERROR]Lux Write Fail\n");
+			Error_Data(Lux, "[ERROR]RRegister Address wrong!\n", errno, LOG_LINUX);
 			return 1;
 		}
     //Writing value to that specific register
 		if(lux_write_reg1(&desired_val,a))
 		{
-				Error_Data(Lux, "Desired Value writing failed\n", errno, Log_Native);
+				Error_Data(Lux, "[ERROR]Desired Value writing failed\n", errno, LOG_LINUX);
 				return 1;
 		}
 		return 0;
@@ -160,16 +143,17 @@ uint8_t lux_write_register(uint8_t register_addr, uint8_t desired_val)
 uint8_t lux_read_register(uint8_t register_addr, uint8_t* desired_val)
 {
   uint8_t lux_data_write = 0;
-	lux_data_write = Command_Write_Register(register_addr);
+	lux_data_write = Lux_Command_Word_Data(register_addr);
   if(lux_write_reg(&lux_data_write))
     {
-      printf("Checking address failed where written", errno, Log_Native);
+      printf("[ERROR]Checking address failed where written", errno, LOG_LINUX);
+      Error_Data(Lux, "[ERROR]Checking address failed where written\n", errno, LOG_LINUX);
       return 1;
     }
   //reading value from the register written above
   if(lux_read_reg(desired_val,1))
     {
-      Error_Data(Lux, "Lux Value read failed\n", errno, Log_Native);
+      Error_Data(Lux, "[ERROR]Lux Value read failed\n", errno, LOG_LINUX);
       return 1;
     }
       return 0;
@@ -191,7 +175,7 @@ uint8_t custom_test_lux_config(void)
     //Control Register reads 0x03, if not control register failed to start and lux cant be taken
 		if(lux_read_register(Control_Register_Address, &read_value_stored))
 		{
-				Error_Data(Lux, "Control register 0x03 failed to read", ENOMSG, Log_Native);
+				Error_Data(Lux, "[ERROR]Control register 0x03 failed to read", ENOMSG, LOG_LINUX);
 				return 1;
 		}
 
@@ -206,7 +190,7 @@ uint8_t custom_test_lux_config(void)
 		// Reading back Timing Register for specific gain and time
 		if(lux_read_register(Timing_Register_Address, &read_value_stored))
 		{
-				Error_Data(Lux, "Read: Timing_Register_Address", ENOMSG, Log_Native);
+				Error_Data(Lux, "[ERROR]Read: Timing_Register_Address", ENOMSG, LOG_LINUX);
 				return 1;
 		}
     Sent_Queue(Lux, Logging, "[INFO]", "Gain and Integration Time Success\n");
@@ -220,7 +204,7 @@ uint8_t custom_test_lux_config(void)
 
 		if(lux_read_register(Interrupt_Control_register, &read_value_stored))
 		{
-				Error_Data(Lux, "Interrupt register not reead successfully", ENOMSG, Log_Native);
+				Error_Data(Lux, "[ERROR]Interrupt register not read successfully", ENOMSG, LOG_LINUX);
 				return 1;
 		}
     Sent_Queue(Lux, Logging, "[INFO]", "Interrupt Control Register Success\n");
@@ -248,7 +232,7 @@ uint8_t custom_test_lux_config(void)
 		}
 		if(lux_read_reg(&lux_data_write[0], 2))
 		{
-				Error_Data(Lux, "Read Tlow Fail", errno, Log_Native);
+				Error_Data(Lux, "[ERROR]Read Tlow Fail", errno, LOG_LINUX);
 				return 1;
 		}
     Sent_Queue(Lux, Logging, "[INFO]", "\nInterrupt Threshold TLow Pass\n");
@@ -274,7 +258,7 @@ uint8_t custom_test_lux_config(void)
 		}
 		if(lux_read_reg(&lux_data_write[0], 2))
 		{
-				Error_Data(Lux, "Thigh read failed", errno, Log_Native);
+				Error_Data(Lux, "[ERROR]Thigh read failed", errno, LOG_LINUX);
 				return 1;
 		}
     Sent_Queue(Lux, Logging, "INFO", "\nInterrupt Threshold THigh Pass\n");
@@ -282,7 +266,7 @@ uint8_t custom_test_lux_config(void)
     //Read read register
 		if(lux_read_register(Read_Register_ID, &read_value_stored))
 		{
-				Error_Data(Lux, "Reading failed from register\n", ENOMSG, Log_Native);
+				Error_Data(Lux, "[ERROR]Reading failed from register\n", ENOMSG, LOG_LINUX);
 				return 1;
 		}
     Sent_Queue(Lux, Logging, "INFO", "\nID Register Test Succeeded\n");
@@ -290,86 +274,180 @@ uint8_t custom_test_lux_config(void)
 		return 0;
 }
 
-uint8_t get_lux(float *lux_final_value)
+//
+// uint8_t get_lux(float *lux_final_value)
+// {
+//
+// 		float value_CH0 ,value_CH1,ratio= 0;
+// 	  uint8_t lux_data_write[2] = {0};
+//
+//     // Powering ON the Sensor by writing 0x03 to Control Register
+//     if(lux_write_register(0x00, 0x03))
+//     {
+//         //Log_error(Lux, "Write: Lux_Control_Reg", ENOMSG, LOGGING_AND_LOCAL);
+//         return 1;
+//     }
+//
+//     // Setting High Gain and High Integration Time
+//     if(lux_write_register(0x01, Lux_Set_Gain_High(2)))
+//     {
+//         //Log_error(Lux, "Write: Lux_Timing_Reg", ENOMSG, LOGGING_AND_LOCAL);
+//         return 1;
+//     }
+//     lux_data_write[0] = Word_Data_Register (Data0_Lower_Bits);
+//     int temp4 = (lux_write_reg(&lux_data_write[0]));
+//     if(temp4)
+//   	{
+//   		printf("Data 0 Not written\n");
+//   		return 1;
+//     }
+//     temp4 = (lux_read_reg(&lux_data_write[0], 2));
+//     if(temp4)
+//     {
+//     	Error_Data(Lux, "Data 0 not read", errno, LOG_LINUX);
+//     	return 1;
+//     }
+//     value_CH0 = (float)((lux_data_write[1] << 8) | lux_data_write[0]);
+//
+// 		lux_data_write[0] = Word_Data_Register (Data1_Lower_Bits);
+// 		if(lux_write_reg(&lux_data_write[0]))
+//   	{
+//       printf("Data 1 Not written\n");
+//     	return 1;
+//   	}
+//     if(lux_read_reg(&lux_data_write[0], 2))
+//     {
+//       Error_Data(Lux, "Data 1 not read", errno, LOG_LINUX);
+//     	return 1;
+//     }
+//
+// 		value_CH1 = (float)((lux_data_write[1] << 8) | lux_data_write[0]);
+//
+// 		ratio = (value_CH1 / value_CH0);
+//     printf(" ratio %f %f \n",value_CH1, value_CH0);
+//
+//     //Whole calculation is from datasheet
+// 		if((ratio > 0) && (ratio <= 0.5))
+//     {
+//       *lux_final_value = (0.0304 * value_CH0) - (0.062 * value_CH0 * pow(ratio, 1.4));
+//     }
+//
+// 		else if((ratio > 0.5) && (ratio <= 0.61))
+//     {
+//       *lux_final_value = (0.0224 * value_CH0) - (0.031 * value_CH1);
+//     }
+//
+// 		else if((ratio > 0.61) && (ratio <= 0.80))
+//     {
+//       *lux_final_value = (0.0128 * value_CH0) - (0.0153 * value_CH1);
+//     }
+//     else if((ratio > 0.80) && (ratio <= 1.30))
+//     {
+//       *lux_final_value = (0.00146 * value_CH0) - (0.00112 * value_CH1);
+//     }
+// 		else
+//     {
+//       *lux_final_value = 0;
+//     }
+//     printf(" lux value is %f \n",*lux_final_value);
+//     return 0;
+//
+// }
+//
+// uint8_t day_night(float *tem)
+// {
+//   get_lux(tem);
+//   if(*tem <= 100)
+//   {
+//     printf("\n Its Noght Time");
+//   	Lux_Warning = 0x01;
+//   }
+//   else if(*tem >=300)
+//   {
+//     printf("\n Its Day Time");
+//     Lux_Warning = 0x02;
+//   }
+//   return 0;
+// }
+
+uint8_t get_lux(float *l_data)
 {
+		static float lux_ch0 = 0;
+		static float lux_ch1 = 0;
+		static float ratio = 0;
 
-		float value_CH0 ,value_CH1,ratio= 0;
-	  uint8_t lux_data_write[2] = {0};
+		// Using Word Mode
+		static uint8_t lux_data_write[2] = {0};
 
-    lux_data_write[0] = Word_Data_Register (Data0_Lower_Bits);
-    int temp4 = (lux_write_reg(&lux_data_write[0]));
-    if(temp4)
-  	{
-  		printf("Data 0 Not written\n");
-  		return 1;
-    }
-    temp4 = (lux_read_reg(&lux_data_write[0], 2));
-    if(temp4)
+		// The following two steps - repeatedly turning on power, and setting gain & timing, aren't
+		// absolutely necessary - but sometimes the sensors gives out 0 lux reading without these
+
+		// Powering ON the Sensor by writing 0x03 to Control Register
+		if(lux_write_register(0x00, 0x03))
+		{
+				Error_Data(Lux, "[ERROR]Return value != 0\n", ENOMSG, LOG_LINUX);
+				return 1;
+		}
+
+		// Setting High Gain and High Integration Time
+		if(lux_write_register(0x01, Lux_Set_Gain_High(Lux_High_Integration_Time)))
+		{
+				Error_Data(Lux, "[ERROR]Return value != 0\n", ENOMSG, LOG_LINUX);
+				return 1;
+		}
+
+		// Reading Ch0
+		lux_data_write[0] = Lux_Command_Word_Data(Lux_Data0_Low);
+		if(write_pointer(&lux_data_write[0]))
+		{
+				Error_Data(Lux, "[ERROR]Return value != 0\n", ENOMSG, LOG_LINUX);
+				return 1;
+		}
+		if(lux_read_reg(&lux_data_write[0], 2))
+		{
+				Error_Data(Lux, "[ERROR]Return value != 0\n", ENOMSG, LOG_LINUX);
+				return 1;
+		}
+		lux_ch0 = (float)((lux_data_write[1] << 8) | lux_data_write[0]);
+
+		// Reading Ch1
+		lux_data_write[0] = Lux_Command_Word_Data(Lux_Data1_Low);
+		if(write_pointer(&lux_data_write[0]))
+		{
+				Error_Data(Lux, "[ERROR]Return value != 0\n", ENOMSG, LOG_LINUX);
+				return 1;
+		}
+		if(lux_read_reg(&lux_data_write[0], 2))
+		{
+				Error_Data(Lux, "[ERROR]Return value != 0\n", ENOMSG, LOG_LINUX);
+				return 1;
+		}
+		lux_ch1 = (float)((lux_data_write[1] << 8) | lux_data_write[0]);
+
+		ratio = (lux_ch1 / lux_ch0);
+    printf("[INFO]ratio is %f %f",lux_ch1,lux_ch0);
+		// Calculation is Based on Datasheet
+		if((ratio > 0) && (ratio <= 0.5))		*l_data = (0.0304 * lux_ch0) - (0.062 * lux_ch0 * pow(ratio, 1.4));
+		else if((ratio > 0.5) && (ratio <= 0.61))		*l_data = (0.0224 * lux_ch0) - (0.031 * lux_ch1);
+		else if((ratio > 0.61) && (ratio <= 0.80))		*l_data = (0.0128 * lux_ch0) - (0.0153 * lux_ch1);
+		else if((ratio > 0.80) && (ratio <= 1.30))		*l_data = (0.00146 * lux_ch0) - (0.00112 * lux_ch1);
+		else		*l_data = 0;
+    printf("[INFO]ratio is %f ",*l_data);
+
+    // Checking whether it's day or night
+		if(*l_data <= 100)
     {
-    	Error_Data(Lux, "Data 0 not read", errno, Log_Native);
-    	return 1;
-    }
-    value_CH0 = (float)((lux_data_write[1] << 8) | lux_data_write[0]);
-
-		lux_data_write[0] = Word_Data_Register (Data1_Lower_Bits);
-		if(lux_write_reg(&lux_data_write[0]))
-  	{
-      printf("Data 1 Not written\n");
-    	return 1;
-  	}
-    if(lux_read_reg(&lux_data_write[0], 2))
-    {
-      Error_Data(Lux, "Data 1 not read", errno, Log_Native);
-    	return 1;
-    }
-
-		value_CH1 = (float)((lux_data_write[1] << 8) | lux_data_write[0]);
-
-		ratio = (value_CH1 / value_CH0);
-    printf(" ratio %f %f \n",value_CH1, value_CH0);
-
-    //Whole calculation is from datasheet
-		if((ratio > 0) && (ratio <= 0.5))
-    {
-      *lux_final_value = (0.0304 * value_CH0) - (0.062 * value_CH0 * pow(ratio, 1.4));
-    }
-
-		else if((ratio > 0.5) && (ratio <= 0.61))
-    {
-      *lux_final_value = (0.0224 * value_CH0) - (0.031 * value_CH1);
-    }
-
-		else if((ratio > 0.61) && (ratio <= 0.80))
-    {
-      *lux_final_value = (0.0128 * value_CH0) - (0.0153 * value_CH1);
-    }
-    else if((ratio > 0.80) && (ratio <= 1.30))
-    {
-      *lux_final_value = (0.00146 * value_CH0) - (0.00112 * value_CH1);
+      printf("inside Day loop ************************\n");
+      LUX_WARN = 1;
     }
 		else
     {
-      *lux_final_value = 0;
+      printf("inside Day loop2 ************************\n");
+
+      LUX_WARN = 2;
+
     }
-    printf(" lux value is %f \n",*lux_final_value);
-    return 0;
-
-}
-
-uint8_t day_night(float *tem)
-{
-  get_lux(tem);
-  if(*tem <= 100)
-  {
-    printf("\n Its Noght Time");
-  	Lux_Warning = 0x01;
-  }
-  else if(*tem >=300)
-  {
-    printf("\n Its Day Time");
-    Lux_Warning = 0x02;
-  }
-  return 0;
+		return 0;
 }
 
 uint8_t lux_initial_sensor(void)
@@ -378,13 +456,13 @@ uint8_t lux_initial_sensor(void)
 		File_Descripter_LUX = open(I2C_BUS, O_RDWR);
 		if(File_Descripter_LUX == -1)
 		{
-				Error_Data(Lux, "open(): I2C Bus", errno, Log_Native);
+				Error_Data(Lux, "[ERROR]open(): I2C Bus", errno, LOG_LINUX);
 				return 1;
 		}
     //ioctl is used for multiple buses connected
 		if(ioctl(File_Descripter_LUX, I2C_SLAVE, 0x39) == -1)
 		{
-				Error_Data(Lux, "ioctl(): I2C Bus", errno, Log_Native);
+				Error_Data(Lux, "[ERROR]ioctl(): I2C Bus", errno, LOG_LINUX);
 				return 1;
 		}
 		return 0;
@@ -394,36 +472,36 @@ uint8_t LuxThread_Init(void)
 {
 		char Text[60];
 
-		sprintf(Text, "Lux Thread successfully created with TID: %ld", syscall(SYS_gettid));
+		sprintf(Text, "[INFO]Lux Thread successfully created with TID: %ld", syscall(SYS_gettid));
 		Sent_Queue(Lux, Logging, "[INFO]", Text);
-    sprintf(Text, "Lux Thread with PID: %ld", syscall(SYS_getpid));
+    sprintf(Text, "[INFO]Lux Thread with PID: %ld", syscall(SYS_getpid));
     Sent_Queue(Lux, Logging, "[INFO]", Text);
 		pthread_mutex_lock(&lock);
 
 		if(lux_initial_sensor() != 0)
     {
-      printf("\n Lux not initialised properly");
-      Error_Data(Lux, "[Lux_Error]Not initialised lux sensor", ENOMSG, Log_Native);
+      printf("[INFO]Lux not initialised properly");
+      Error_Data(Lux, "[Lux_Error]Not initialised lux sensor", ENOMSG, LOG_LINUX);
       pthread_mutex_unlock(&lock);
       return 1;
     }
     else
 		{
-      printf("\nLux Sensor ON\n");
+      printf("[INFO]Lux Sensor ON\n");
       Sent_Queue(Lux, Logging, "[INFO]", "\nLux Sensor Initiliazed Successfully\n");
 	  }
 
 		if(custom_test_lux_config() != 0)
     {
-      printf("\n BIST not proper");
-      Error_Data(Lux, "[Error_Lux]BIST Not Proper Initialised", ENOMSG, Log_Native);
+      printf("\n[INFO]BIST not proper");
+      Error_Data(Lux, "[Error_Lux]BIST Not Proper Initialised", ENOMSG, LOG_LINUX);
       pthread_mutex_unlock(&lock);
       return 1;
     }
 
 		else
 		{
-      printf("Bist is proper for LUX\n");
+      printf("[INFO]Bist is proper for LUX\n");
       Sent_Queue(Lux, Logging, "[INFO]", "Lux Sensor BST Pass\n");
 		}
 

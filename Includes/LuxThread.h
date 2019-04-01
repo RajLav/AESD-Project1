@@ -22,6 +22,10 @@
 #define Data0_Higher_Bits						0x0D
 #define Data1_Lower_Bits						0x0E
 #define Data1_Higher_Bits						0x0F
+#define Lux_Data0_Low						0x0C
+#define Lux_Data0_High					0x0D
+#define Lux_Data1_Low						0x0E
+#define Lux_Data1_High					0x0F
 
 #define THresholdLOW					0x02
 #define THresholdLOWHIGH					0x03
@@ -30,12 +34,21 @@
 #define Control_Register_start			0x03
 #define Interrupt_Register_Control			0x1F
 
-#define Lux_Set_Gain_High(x)			0x14
+// Defines and macros for using command register with high flexibility
+
+#define Word_Command_Reg(x)		((x & 0X0F) | 0XA0)
+
+
+#define Lux_Low_Integration_Time		(0)		// 13.7ms
+#define Lux_Med_Integration_Time		(1)		// 101ms
+#define Lux_High_Integration_Time		(2)		// 402ms
+
+#define Lux_Set_Gain_High(x)				x |	0X10
 
 //Variables declared
 int File_Descripter_LUX;
 sig_atomic_t flag;
-uint8_t LogKillSafe,AliveThreads,Lux_Error_Retry,Lux_Sensor_State;
+uint8_t LogKillSafe,RunningThreads,Lux_Error_Retry,LUX_SENSOR_ST;
 
 //Function Prototypes
 uint8_t lux_common_write(uint8_t* buffedesired_value,int buffer_bytes);
@@ -44,8 +57,6 @@ uint8_t write_pointer(uint8_t* x);
 uint8_t lux_read_reg(uint8_t* x,uint8_t bytes);
 uint8_t lux_write_reg1(uint8_t* x,uint8_t bytes);
 uint8_t lux_write_reg(uint8_t* x);
-uint8_t Word_Data_Register (uint8_t x);
-uint8_t Command_Write_Register(uint8_t x);
 uint8_t lux_write_register(uint8_t register_addr, uint8_t desired_val);
 uint8_t lux_read_register(uint8_t register_addr, uint8_t* desired_val);
 uint8_t custom_test_lux_config(void);
