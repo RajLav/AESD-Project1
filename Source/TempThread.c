@@ -21,7 +21,7 @@ uint8_t base_reg_write(uint8_t* buffedesired_value,int buffer_bytes)
         //Check if temp is equla to bytes read or not
     if(temp!=buffer_bytes)
     {
-            //if not then return fail
+      Error_Data(Temp, "[ERROR]Insufficent Buffer Bytes!\n", errno, LOG_LINUX);
       return 1;
     }
     else
@@ -39,7 +39,7 @@ uint8_t base_reg_read(uint8_t *buffedesired_value,int buffer_bytes)
         //check if temp is equal to bytes read
     if(temp!=buffer_bytes)
     {
-            //if not then return fail
+      Error_Data(Temp, "[ERROR]Insufficent Buffer Bytes!\n", errno, LOG_LINUX);
       return 1;
     }
     else
@@ -57,7 +57,7 @@ uint8_t write_reg_ptr(uint8_t* x)
           //if not equal to 0 return fail
     if(temp!=0)
     {
-            //if equal to 0 then let this function retrun 0
+      Error_Data(Temp, "[ERROR]Return!=0\n", errno, LOG_LINUX);
       return 1;
     }
     else
@@ -72,7 +72,7 @@ uint8_t temp_read_reg(uint8_t* x)
     uint8_t temp = base_reg_read(x,2);
     if(temp!=0)
     {
-      //if equal to anything else then return 1
+      Error_Data(Temp, "[ERROR]Return!=0\n", errno, LOG_LINUX);
       return 1;
     }
     else
@@ -88,6 +88,7 @@ uint8_t temp_write_reg(uint8_t* x)
     int temp = base_reg_write(x,3);
     if(temp!=0)
     {
+      Error_Data(Temp, "[ERROR]Return!=0\n", errno, LOG_LINUX);
       return 1;
     }
 
@@ -277,7 +278,7 @@ uint8_t config_register_temperature(void)
 
         if(main_read_register(Base_Config_register, &Register_buffer_storage[0]))
         {
-          Error_Data(Temp, "Error in Reading Base register\n", ENOMSG, LOG_LINUX);
+          Error_Data(Temp, "[ERROR]Error in Reading Base register\n", ENOMSG, LOG_LINUX);
         	return 1;
         }
 
@@ -361,35 +362,9 @@ uint8_t BIST_Temp_Check(void)
       Sent_Queue(Temp, Logging, "INFO", "\nReset Successfully\n");
     }
 
-    int temp2 = all_registers_check();
-		if(temp2 !=0)
-		{
-		  Error_Data(Temp, "[Error]All registers not checked successfully\n", ENOMSG, LOG_LINUX);
-			pthread_mutex_unlock(&lock);
-			return 1;
-		}
-		else
-		{
-      printf("[INFO]Register OK\n");
-      Sent_Queue(Temp, Logging, "[INFO]", "\nAll registers check Successfully\n");
-		}
-
-		int temp3 = config_register_temperature();
-		if(temp3 != 0)
-		{
-			Error_Data(Temp, "[Error]BST not success\n", ENOMSG, LOG_LINUX);
-			pthread_mutex_unlock(&lock);
-			return 1;
-		}
-		else
-		{
-      printf("[INFO]Bist Pass\n");
-			Sent_Queue(Temp, Logging, "[INFO]", "Built In Success\n");
-		}
-
-		 pthread_mutex_unlock(&lock);
+		pthread_mutex_unlock(&lock);
      printf("[INFO]Normal function\n");
-	 	
+		
     return 0;
 
 }
