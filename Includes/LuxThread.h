@@ -44,7 +44,6 @@
 #define Lux_High_Integration_Time		(2)		// 402ms
 
 #define Lux_Set_Gain_High(x)				x |	0X10
-
 //Variables declared
 int File_Descripter_LUX;
 sig_atomic_t flag;
