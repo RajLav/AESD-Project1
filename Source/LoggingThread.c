@@ -5,33 +5,32 @@
 *@Date: 03/23/2018
 */
 
-void log_init(char* user_path)
+uint8_t log_init(char* user_path)
 {
 	FILE *file;
 	file = fopen(user_path, "w");
 
 	if(file == NULL)
 	{
-		printf("Error opening file! \n");
+		printf("[ERROR]Error opening file! \n");
 		exit(1);
 	}
 
-	fprintf(file,"[%lf] [INFO_LOG]: Successfully created logfile! TID: %ld\n\n", GetCurrentTime(), syscall(SYS_gettid));
-	printf("[%lf] [INFO_LOG]: Successfully created logfile! TID: %ld\n\n", GetCurrentTime(), syscall(SYS_gettid));
+	fprintf(file,"[%lf] [INFO_LOG]: Successfully created logfile! TID: %ld PID: %ld\n\n", GetCurrentTime(), syscall(SYS_gettid),syscall(SYS_getpid));
+	printf("[%lf] [INFO_LOG]: Successfully created logfile! TID: %ld PID: %ld\n\n", GetCurrentTime(), syscall(SYS_gettid),syscall(SYS_getpid));
 
-	fflush(file);
 	fclose(file);
-
+	return 0;
 }
 
 
-void log_file(char* user_path, ThreadStruct* StringToSend)
+uint8_t log_file(char* user_path, ThreadStruct* StringToSend)
 {
 	FILE *file;
 	file = fopen(user_path, "a");
 	if(file == NULL)
 	{
-		printf("File could not be opend\n");
+		printf("[ERROR]File could not be opend\n");
 	}
 
 	char* SourceString;
@@ -45,15 +44,15 @@ void log_file(char* user_path, ThreadStruct* StringToSend)
 	char* line;
 	if((StringToSend->Dest)<6)
 	{
-		line = "[%lf] %s(%s): %s\n		L-> Source: '%s'\n\n";
-		fprintf(file, line,GetCurrentTime(),ThreadString[StringToSend->Dest], StringToSend->LogLevel, StringToSend->Msg, SourceString);
-		printf(line, GetCurrentTime(),ThreadString[StringToSend->Dest], StringToSend->LogLevel, StringToSend->Msg, SourceString);
+		line = "[%lf][INFO] %s(%s): %s::		 Source: '%d'\n\n";
+		fprintf(file, line,GetCurrentTime(),ThreadString[StringToSend->Dest], StringToSend->LogLevel, StringToSend->Msg, StringToSend->Source);
+		printf(line, GetCurrentTime(),ThreadString[StringToSend->Dest], StringToSend->LogLevel, StringToSend->Msg, StringToSend->Source);
 	}
 	else
 	{
-		line = "[%lf] %s(%s): %s\n		L-> Source: '%s'\n\n";
-		fprintf(file, line,GetCurrentTime(),ThreadString[6],StringToSend->LogLevel, StringToSend->Msg, SourceString);
-		printf(line, GetCurrentTime(),ThreadString[6], StringToSend->LogLevel, StringToSend->Msg, SourceString);
+		line = "[%lf][ERROR] %s(%s): %s::		 Source: '%d'\n\n";
+		fprintf(file, line,GetCurrentTime(),ThreadString[6],StringToSend->LogLevel, StringToSend->Msg,  StringToSend->Source);
+		printf(line, GetCurrentTime(),ThreadString[6], StringToSend->LogLevel, StringToSend->Msg,  StringToSend->Source);
 
 	}
 
@@ -61,4 +60,5 @@ void log_file(char* user_path, ThreadStruct* StringToSend)
 
 	fflush(file);
 	fclose(file);
+	return 0;
 }

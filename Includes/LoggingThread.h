@@ -11,25 +11,23 @@
 
 #include "main.h"
 #include "LoggingThread.h"
-#include "main.h"
-#include "POSIX_Qs.h"
 
 pthread_mutex_t lock;
 
 sig_atomic_t flag;
 uint8_t LogKillSafe;
-uint8_t AliveThreads;
+uint8_t RunningThreads;
 
-void * LoggingThread(void * args);
+void * Log_Queue_Thread(void * args);
 
 char* ThreadString[]={" ","Main","Logging","Socket","Temperature","Lux","Unknown"};
 
 /* This function Opens the file with specified name or uses default value if not defined.
    Successful opening result in Success log. Else Error message is logged*/
-void log_init(char* user_path);
+uint8_t log_init(char* user_path);
 
 /* Logs the particular thread in the source description with time stamp and
    even the destination description with time stamp.*/
-void log_file(char* user_path, ThreadStruct* StringToSend);
+uint8_t log_file(char* user_path, ThreadStruct* StringToSend);
 
 #endif
