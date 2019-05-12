@@ -1,4 +1,3 @@
-/* Reference Poorn Mehta and Nikhil Divekar*/
 
 #include <mqueue.h>
 #include <stdio.h>
@@ -18,7 +17,12 @@
 #define my_queue_temp					"/my_queue_temp_q"
 #define my_queue_lux					"/my_queue_lux_q"
 
+uint8_t LogKillSafe,RunningThreads,Lux_Error_Retry,LUX_SENSOR_ST;
+uint8_t IF_RETRY,Present_Temp_Sensor_Output;
+uint8_t lux_t_retry, lux_state_sensor;
+uint8_t temp_t_retry, temp_state_sensor;
 
+sig_atomic_t flag;
 
 void * Log_Queue_Thread(void * args)
 {
@@ -33,30 +37,32 @@ void * Log_Queue_Thread(void * args)
 	MY_QUEUE = mq_open(my_queue_log, O_CREAT | O_RDONLY | O_CLOEXEC, 0666, &attr);
 	if(MY_QUEUE == (mqd_t) -1)
 	{
-		Error_Data(Logging, "mq_open()", errno, TERMINAL_LOG);
+		Error_Data(Logging, "Logging Queue not openend\n", errno, TERMINAL_LOG);
 	}
 
 	ThreadStruct MsgRecv;
-	while(LogKillSafe > 0)
+	while(1)
 	{
 		if(mq_receive(MY_QUEUE, &MsgRecv, sizeof(ThreadStruct), NULL) == -1)
 		{
-			Error_Data(Logging, "mq_receive()", errno, TERMINAL_LOG);
+			Error_Data(Logging, "Log Receive Failed\n", errno, TERMINAL_LOG);
 		}
-
 		else
 		{
 			log_file(Arguments->LogFile_Path, &MsgRecv);
 			RunningThreads |= LOGGING_ALIVE;
-
 		}
+
+			if((flag == SIGUSR1) || (flag == SIGUSR2))
+			{
+				printf("[%lf] Killed Log\n", GetTime());
+				RunningThreads &= ~LOGGING_ALIVE;
+				mq_unlink(my_queue_log);
+				printf("[%lf] Logging Thread: Logging Thread has terminated successfully and will now exit\n", GetTime());
+				return 0;
+			}
 	}
 
-	printf("[%lf] Killed Log\n\n", GetTime());
-	RunningThreads &= ~LOGGING_ALIVE;
-	mq_unlink(my_queue_log);
-	printf("[%lf] Logging Thread: Logging Thread has terminated successfully and will now exit\n\n", GetTime());
-	return 0;
 }
 
 void Sent_Queue(uint8_t Src, uint8_t Dst, char* Log, char* Message)
@@ -97,19 +103,18 @@ void Sent_Queue(uint8_t Src, uint8_t Dst, char* Log, char* Message)
 
 	if(MY_QUEUE == (mqd_t) -1)
 	{
-		printf("\nError is tjete\n");
+		printf("\nError is there in openeing sent queue\n");
 	}
 
-
 	mq_send(MY_QUEUE, &StructSent, sizeof(ThreadStruct), 0);
-
 	mq_close(MY_QUEUE);
 }
+
 void Error_Data(uint8_t Src, char* Err_Msg, int errnum, uint8_t LogVal)
 {
 	char Error_Log[150];
 	char* SourceString;
-	sprintf(Error_Log, "%s: ", Err_Msg, Error_Log);
+	sprintf(Error_Log, "%s: \n", Err_Msg, Error_Log);
 
 	if(Src == 0)
 		SourceString = "Main Thread";
@@ -126,8 +131,8 @@ void Error_Data(uint8_t Src, char* Err_Msg, int errnum, uint8_t LogVal)
 
 	if(LogVal ==  LOG_LINUX)
 	{
-			printf("[%lf][ERROR]'%s' => %s\n\n", GetTime(), SourceString, Error_Log);
-			Sent_Queue(Src, Logging, "ERROR", Error_Log);
+			printf("[%lf][ERROR]'%s' => %s \n", GetTime(), SourceString, Error_Log);
+			Sent_Queue(Src, Logging, "ERROR\n", Error_Log);
 	}
 
 }
@@ -136,22 +141,18 @@ void Error_Data(uint8_t Src, char* Err_Msg, int errnum, uint8_t LogVal)
 void * Temperature_Thread(void * args)
 {
     uint8_t temp1;
-    printf("\n  success");
+    printf("success\n");
     bist();
     mqd_t MY_QUEUE;
-
     struct mq_attr attr;
     attr.mq_flags = O_NONBLOCK;
     attr.mq_maxmsg = 10;
     attr.mq_msgsize = sizeof(ThreadStruct);
     attr.mq_curmsgs = 0;
-
-
-
     MY_QUEUE = mq_open(my_queue_temp, O_CREAT | O_RDONLY | O_NONBLOCK | O_CLOEXEC, 0666, &attr);
     if(MY_QUEUE == (mqd_t) -1)
     {
-			printf("Erro");
+			printf("[Error]In openeing Temperature thread Queue\n");
 		}
 
     uint8_t Temperature_Unit = Celsius;
@@ -159,49 +160,44 @@ void * Temperature_Thread(void * args)
 		float Temperature_C = 0;
     static char Text_Log_Printed[150];
     char Temperature_Text[150];
-
+		
     while(1)
     {
-
         RunningThreads |= TEMP_ALIVE;
-
-        if((flag == Temperature_Signal) && (Present_Temp_Sensor_Output == SENSOR_ON))
+        if((flag == Reading_Flag))
         {
-                flag = 0;
-
-                temp1 = get_temp(&Temperature_C);
-
-                if(temp1)
-                {
-                        Error_Data(Temp, "Error while Reading Temperature", ENOMSG, LOG_LINUX);
-                        IF_RETRY = Retry_Mode_ON;
-                        Present_Temp_Sensor_Output = SENSOR_OFF;
-                }
-                else
-                {
-                        float Temperature_F = (Temperature_C * 1.8) + 32;
-                        float Temperature_K = Temperature_C + 273.15;
-
-                        if(Temperature_C > 40.000000 || Temperature_C < 5.000000)
+          flag = 0;
+          temp1 = get_temp(&Temperature_C);
+          if(temp1)
+            {
+              Error_Data(Temp_Log, "Error while Reading Temperature\n", ENOMSG, LOG_LINUX);
+              temp_t_retry = Retry_Mode_ON;
+            }
+            else
+              {
+                float Temperature_F = (Temperature_C * 1.8) + 32;
+                float Temperature_K = Temperature_C + 273.15;
+    //            if(Temperature_C > 40.000000 || Temperature_C < 5.000000)
                       //  	gpio_on_off(gpio54,1);
 
                         if(Temperature_Unit == Celsius)
                         {
-                        	printf("Temperature :%f-C", Temperature_C);
-                            sprintf(Temperature_Text, "Temperature :%f-C", Temperature_C);
+                        	printf("Temperature :%f-C\n", Temperature_C);
+                          sprintf(Temperature_Text, "Temperature :%f-C", Temperature_C);
+													Sent_Queue(Temp_Log, Logging, "INFO", Temperature_Text);
                         }
                         else if(Temperature_Unit == Fahrenheit)
                          {
-                         	printf("Temperature :%f-F", Temperature_F);
-                           	sprintf(Temperature_Text, "Temperature :%f-F", Temperature_F);
+                         	printf("Temperature :%f-F\n", Temperature_F);
+                          sprintf(Temperature_Text, "Temperature :%f-F", Temperature_F);
+													Sent_Queue(Temp_Log, Logging, "INFO", Temperature_Text);
                          }
                         else if(Temperature_Unit == Kelvin)
                         {
-							printf("Temperature :%f-K", Temperature_K);
+														printf("Temperature :%f-K\n", Temperature_K);
                             sprintf(Temperature_Text,"Temperature :%f-K", Temperature_K);
+														Sent_Queue(Temp_Log, Logging, "INFO", Temperature_Text);
                         }
-                        Sent_Queue(Temp, Logging, "INFO", Temperature_Text);
-
 
                         int temp1 = mq_receive(MY_QUEUE, &MsgRecv, sizeof(ThreadStruct), NULL);
                         if(temp1 != -1)
@@ -211,7 +207,7 @@ void * Temperature_Thread(void * args)
                                         if(strcmp("TC",MsgRecv.Msg) == 0)
                                         {
                                                 Temperature_Unit = Celsius;
-                                                sprintf(Temperature_Text, "Temperature :%f-C", Temperature_C);
+                                                sprintf(Temperature_Text, "Temperature :%f-C\n", Temperature_C);
                                         }
                                         else if(strcmp("TF",MsgRecv.Msg) == 0)
                                         {
@@ -221,45 +217,37 @@ void * Temperature_Thread(void * args)
                                         else if(strcmp("TK",MsgRecv.Msg) == 0)
                                         {
                                                 Temperature_Unit = Kelvin;
-                                                sprintf(Temperature_Text, "Temperature :%f-C", Temperature_K);
+                                                sprintf(Temperature_Text, "Temperature :%f-K", Temperature_K);
                                         }
-                                        Sent_Queue(Temp, Socket, "INFO", Temperature_Text);
+                                        Sent_Queue(Temp_Log, Socket, "INFO", Temperature_Text);
                                 }
                                 else
-									Error_Data(Temp, Text_Log_Printed, ENOMSG, LOG_LINUX);
+									Error_Data(Temp_Log, Text_Log_Printed, ENOMSG, LOG_LINUX);
 
                         }
                 }
         }
 
 
-        else if((flag == SIGUSR1) || (flag == SIGUSR2) || ((Present_Temp_Sensor_Output == SENSOR_OFF) && (IF_RETRY == Temp_No_Retry)))
+        else if((flag == SIGUSR1) || (flag == SIGUSR2))
         {
-            if((flag == SIGUSR1) || (flag == SIGUSR2))        Sent_Queue(Temp, Logging, "INFO", "[ERROR]Terminating Temperature Thread");
-
-
-            if(mq_unlink(my_queue_temp) == 0)
-
-            {
-                Sent_Queue(Temp, Logging, "INFO", "Successfully unlinked Temp queue!");
-            }
+          printf("\n[ERROR]Terminating Temperature Thread");
+					if(mq_unlink(my_queue_temp) == 0)
+          {
+						printf("\nSuccessfully unlinked Temp queue");
+          }
 
             char TempTxt[150];
             if(flag == SIGUSR1)
             {
-                sprintf(TempTxt, "[ERROR]USR1 Received=>%d", flag);
-                Sent_Queue(Temp, Logging, "INFO", TempTxt);
+							printf("\n[ERROR]USR1 Received=>%d", flag);
             }
             else if(flag == SIGUSR2)
             {
-                sprintf(TempTxt, "[ERROR]USR2 Received=>%d", flag);
-                Sent_Queue(Temp, Logging, "INFO", TempTxt);
+              printf("\n[ERROR]USR2 Received=>%d", flag);
             }
-            LogKillSafe--;
             RunningThreads &= ~TEMP_ALIVE;
-            Sent_Queue(Temp, Logging, "INFO", "Temp Thread terminated successfully");
-
-
+						printf("\nTemp Thread terminated successfully");
             return 0;
         }
     }
@@ -273,63 +261,49 @@ void * LuxThread(void * args)
 	resp = LuxThread_Init();
 	if(resp)
 	{
-		Error_Data(Lux, "[ERROR]Error Initializing Lux Sensor", ENOMSG, LOG_LINUX);
-		Lux_Error_Retry = Retry_Score;
-		LUX_SENSOR_ST = SENSOR_OFF;
+		Error_Data(Lux, "[ERROR]Error Initializing Lux Sensor\n", ENOMSG, LOG_LINUX);
+		lux_t_retry = Retry_Score;
 	}
 	else
 	{
-		Lux_Error_Retry = 0;
-		LUX_SENSOR_ST = SENSOR_ON;
+		lux_t_retry = 0;
+		printf("\n===============================================LUX INIT DONE");
 	}
 
 
 	mqd_t MY_QUEUE;
-
-
 	struct mq_attr attr;
 	attr.mq_flags = O_NONBLOCK;
 	attr.mq_maxmsg = 10;
 	attr.mq_msgsize = sizeof(ThreadStruct);
 	attr.mq_curmsgs = 0;
 
-
 	MY_QUEUE = mq_open(my_queue_lux, O_CREAT | O_RDONLY | O_NONBLOCK | O_CLOEXEC, 0666, &attr);
 	if(MY_QUEUE == (mqd_t) -1)
 	{
-		Error_Data(Lux, "mq_open()", errno, LOG_LINUX);
+		Error_Data(Lux, "Opening lUX queue error", errno, LOG_LINUX);
 	}
 
-
-
 	ThreadStruct MsgRecv;
-
 	float Lux_Value = 0;
-
-	static char Text_In_Log_File[150];
-
-	char Lux_Text[150];
-
-
+	static char Text_In_Log_File[150];	char Lux_Text[150];
 	while(1)
 	{
 		RunningThreads |= LUX_ALIVE;
 
-		if((flag == Lux_Signal) && (LUX_SENSOR_ST == SENSOR_ON))
-		{
+		  if(flag == Reading_Flag)
+{
+				printf("\n======================== LUX IF PASSED");
 				flag = 0;
-
 				resp = get_lux(&Lux_Value);
-
 				if(resp)
 				{
-						Error_Data(Lux, "[ERROR]Error while Reading Lux\n", ENOMSG, LOG_LINUX);
-						Lux_Error_Retry = Retry_Score;
-						LUX_SENSOR_ST = SENSOR_OFF;
+						Error_Data(Lux, "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]Error while Reading Lux\n", ENOMSG, LOG_LINUX);
+						lux_t_retry = 10;
 				}
 				else
 				{
-						sprintf(Lux_Text, "[INFO]Lux :%f", Lux_Value);
+						sprintf(Lux_Text, "Lux :%f", Lux_Value);
 
             Sent_Queue(Lux, Logging, "INFO", Lux_Text);
 												int resp = mq_receive(MY_QUEUE, &MsgRecv, sizeof(ThreadStruct), NULL);
@@ -358,33 +332,28 @@ void * LuxThread(void * args)
 										}
 }
 
-		else if((flag == SIGUSR1) || (flag == SIGUSR2) || ((LUX_SENSOR_ST == SENSOR_OFF) && (Lux_Error_Retry == 0)))
+			else if((flag == SIGUSR1) || (flag == SIGUSR2))
 		{
 
-			if((flag == SIGUSR1) || (flag == SIGUSR2))		Sent_Queue(Lux, Logging, "INFO", "USR- Passed\n");
+			printf("[ERROR]Terminating Lux Thread\n");
 
 			if(mq_unlink(my_queue_lux) == 0)
-
 			{
-				Sent_Queue(Lux, Logging, "INFO", "Successfully unlinked Lux queue!");
+				printf("Successfully unlinked Lux queue!\n");
 			}
 
 			char luxTxt[150];
 			if(flag == SIGUSR1)
 			{
-				sprintf(luxTxt, "[ERROR]USR1 Received =>%d", flag);
-				Sent_Queue(Lux, Logging, "INFO", luxTxt);
+				printf( "\n[ERROR]USR1 Received =>%d\n", flag);
 			}
 			else if(flag == SIGUSR2)
 			{
-				sprintf(luxTxt, "[ERROR]USR2 Received =>%d", flag);
-				Sent_Queue(Lux, Logging, "INFO", luxTxt);
+				printf( "\n[ERROR]USR2 Received =>%d\n", flag);
 			}
 
-
-			LogKillSafe--;
 			RunningThreads &= ~LUX_ALIVE;
-			Sent_Queue(Lux, Logging, "INFO", "Lux Thread terminated successfully");
+			printf("\nLux Thread terminated successfully");
 			return 0;
 		}
 	}
@@ -396,10 +365,10 @@ void * SocketThread(void * args)
 
 	if(Server_initialisation())
 	{
-		Error_Data(Socket, "[ERROR]Socket Init Failed", ENOMSG, LOG_LINUX);
+		Error_Data(Socket, "[ERROR]Socket Init Failed\n", ENOMSG, LOG_LINUX);
 		return 0;
 	}
-	else		Sent_Queue(Socket, Logging, "INFO", "Socket Initialization Success\n");
+	else		Sent_Queue(Socket, Logging, "[INFO]", "Socket Initialization Success\n");
 
 
 	mqd_t MY_QUEUE;
@@ -415,7 +384,7 @@ void * SocketThread(void * args)
 	MY_QUEUE = mq_open(my_queue_server, O_CREAT | O_RDONLY | O_CLOEXEC, 0666, &attr);
 	if(MY_QUEUE == (mqd_t) -1)
 	{
-		Error_Data(Socket, "mq_open()", errno, LOG_LINUX);
+		Error_Data(Socket, "Queue socket openig error\n", errno, LOG_LINUX);
 	}
 
 	ThreadStruct MsgRecv;
@@ -453,36 +422,25 @@ void * SocketThread(void * args)
             char Socket_Text_q[60];
             sprintf(loglevel_q, "INFO");
 
-            if(strcmp("Exit", p2->string_written) == 0)
+            if(strcmp("external", p2->string_written) == 0)
             {
-                sprintf(Socket_Text, "[INFO]Socket Thread Exiting\n");
-                Sent_Queue(Socket, Logging, loglevel_sock, Socket_Text);
-
-                Sent_Queue(Socket, Logging, "INFO", "User Signal Passed - Terminating Socket Thread");
-
+              	printf("\n[INFO]Socket Thread Exiting");
+								printf("\nUser Signal Passed - Terminating Socket Thread");
                 if(mq_unlink(my_queue_server) == 0)
-
                 {
-                    Sent_Queue(Socket, Logging, "INFO", "Successfully unlinked Socket queue!");
+									printf("\nSuccessfully unlinked Socket queue!");
                 }
-
-                char TempTxt[150];
+                	char TempTxt[150];
                 if(flag == SIGUSR1)
                 {
-                    sprintf(TempTxt, "[ERROR]USR1 - Received : %d", flag);
-                    Sent_Queue(Socket, Logging, "INFO", TempTxt);
+                  printf("\n[ERROR]USR1 - Received : %d", flag);
                 }
                 else
                 {
-                    sprintf(TempTxt, "[ERROR]USR2 - Received : %d", flag);
-                    Sent_Queue(Socket, Logging, "INFO", TempTxt);
+									printf("\n[ERROR]USR2 - Received : %d", flag);
                 }
-								LogKillSafe--;
 								RunningThreads &= ~SOCKET_ALIVE;
-
-                Sent_Queue(Socket, Logging, "INFO", "Socket Thread terminated successfully");
-
-
+								printf("\nSocket Thread terminated successfully");
                 return 0;
             }
 						else
@@ -512,7 +470,7 @@ void * SocketThread(void * args)
                         sprintf(Socket_Text_q, "TC");
                     }
 
-                    Sent_Queue(Socket, Temp, loglevel_q, Socket_Text_q);
+                    Sent_Queue(Socket, Temp_Log, loglevel_q, Socket_Text_q);
                 }
 
                 else if(strcmp("Lux", p2->string_written) == 0)
@@ -539,17 +497,17 @@ void * SocketThread(void * args)
 								printf("Resp: %d\n", resp);
                 if(resp == -1)
                 {
-                    Error_Data(Socket, "mq_timedreceive()", errno, LOG_LINUX);
+                    Error_Data(Socket, "Receive Fail \n", errno, LOG_LINUX);
                     p1->num = 0;
                 }
                 else if(resp < sizeof(ThreadStruct))
                 {
-                    Error_Data(Socket, "mq_timedreceive()", errno, LOG_LINUX);
+                    Error_Data(Socket, "Receive Fail\n", errno, LOG_LINUX);
                     p1->num = 0;
                 }
                 else if(resp == sizeof(ThreadStruct))
                 {
-                    sprintf(Socket_Text, "[INFO]Response from Queue: %s", MsgRecv.Msg);
+                    sprintf(Socket_Text, "[INFO]Response from Queue: %s\n", MsgRecv.Msg);
 
                     strcpy(loglevel_sock, "INFO");
 

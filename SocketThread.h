@@ -34,7 +34,6 @@ char loglevel_sock[30], loglevel_q[30];
 pthread_mutex_t lock;
 
 sig_atomic_t flag;
-uint8_t LogKillSafe;
 uint8_t RunningThreads;
 
 void * SocketThread(void * args);

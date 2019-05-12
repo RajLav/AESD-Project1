@@ -9,10 +9,10 @@
 uint8_t Server_initialisation(void)
 {
 		char Message_Text[60];
-		sprintf(Message_Text, "Socket Server Created with TID: %ld", syscall(SYS_gettid));
+		sprintf(Message_Text, "Socket Server Created with TID: %ld\n", syscall(SYS_gettid));
 		Sent_Queue(Socket, Logging, "[INFO_SERVER]", Message_Text);
-		sprintf(Message_Text, "Socket Server Created with PID: %ld", syscall(SYS_getpid));
-		Sent_Queue(Socket, Logging, "[INFO_SERVER", Message_Text);
+		sprintf(Message_Text, "Socket Server Created with PID: %ld\n", syscall(SYS_getpid));
+		Sent_Queue(Socket, Logging, "[INFO_SERVER]", Message_Text);
 		struct sockaddr_in custom_server;
 
 		//Socket Dexcriptor

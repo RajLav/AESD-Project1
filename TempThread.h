@@ -33,7 +33,6 @@
 //Variables Defined
 
 sig_atomic_t flag;
-uint8_t LogKillSafe,RunningThreads,IF_RETRY,Present_Temp_Sensor_Output;
 
 int File_Descriptor;
 

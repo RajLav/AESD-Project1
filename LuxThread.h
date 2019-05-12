@@ -48,7 +48,6 @@
 //Variables declared
 int File_Descripter_LUX;
 sig_atomic_t flag;
-uint8_t LogKillSafe,RunningThreads,Lux_Error_Retry,LUX_SENSOR_ST;
 
 //Function Prototypes
 uint8_t lux_common_write(uint8_t* buffedesired_value,int buffer_bytes);

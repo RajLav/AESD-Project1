@@ -1,5 +1,5 @@
 main: main.c
-	arm-linux-gcc -o main main.c -lpthread -lrt -D_BSD_SOURCE -lm -I.
+	arm-linux-gcc -o Final main.c -lpthread -lrt -D_BSD_SOURCE -lm -I.
 
 client: socket_client.c
 	gcc -o client socket_client.c -I.

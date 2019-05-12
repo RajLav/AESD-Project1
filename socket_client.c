@@ -24,7 +24,7 @@ my_struct_to_be_passed data1, data2;
 my_struct_to_be_passed *p1 = &data1;
 my_struct_to_be_passed *p2 = &data2;
 
-char IP_Addressed_User[30]="10.0.0.227";
+char IP_Addressed_User[30]="172.21.74.243";
 
 
 void gpio_on_off_client(uint8_t pin,uint8_t state)

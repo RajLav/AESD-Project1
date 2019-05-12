@@ -8,6 +8,10 @@
 #include "LuxThread.h"
 #include "main.h"
 
+uint8_t LogKillSafe,RunningThreads,Lux_Error_Retry,LUX_SENSOR_ST;
+uint8_t IF_RETRY,Present_Temp_Sensor_Output;
+uint8_t lux_t_retry, lux_state_sensor;
+
 //pthread mutex lock used for locking unlocking of data
 pthread_mutex_t lock;
 
@@ -42,7 +46,7 @@ uint8_t lux_common_read(uint8_t *buffedesired_value,int buffer_bytes)
     }
     else
     {            //if true, then write the value which is read and return pass
-			printf("[INFO]Read value is %d \n",*buffedesired_value);
+			printf("[INFO]Read value is: %x \n",*buffedesired_value);
       return 0;
     }
 }
@@ -146,7 +150,7 @@ uint8_t lux_read_register(uint8_t register_addr, uint8_t* desired_val)
 	lux_data_write = Word_Command_Reg(register_addr);
   if(lux_write_reg(&lux_data_write))
     {
-      printf("[ERROR]Checking address failed where written", errno, LOG_LINUX);
+      printf("[ERROR]Checking address failed where written\n", errno, LOG_LINUX);
       Error_Data(Lux, "[ERROR]Checking address failed where written\n", errno, LOG_LINUX);
       return 1;
     }
@@ -175,9 +179,10 @@ uint8_t custom_test_lux_config(void)
     //Control Register reads 0x03, if not control register failed to start and lux cant be taken
 		if(lux_read_register(Control_Register_Address, &read_value_stored))
 		{
-				Error_Data(Lux, "[ERROR]Control register 0x03 failed to read", ENOMSG, LOG_LINUX);
+				Error_Data(Lux, "[ERROR]Control register 0x03 failed to read\n", ENOMSG, LOG_LINUX);
 				return 1;
 		}
+		printf("custom lux config %x",read_value_stored);
 
     Sent_Queue(Lux, Logging, "[INFO]", "Control Register Success\n");
 
@@ -190,10 +195,12 @@ uint8_t custom_test_lux_config(void)
 		// Reading back Timing Register for specific gain and time
 		if(lux_read_register(Timing_Register_Address, &read_value_stored))
 		{
-				Error_Data(Lux, "[ERROR]Read: Timing_Register_Address", ENOMSG, LOG_LINUX);
+				Error_Data(Lux, "[ERROR]Read: Timing_Register_Address\n", ENOMSG, LOG_LINUX);
 				return 1;
 		}
-    Sent_Queue(Lux, Logging, "[INFO]", "Gain and Integration Time Success\n");
+		printf("custom lux config %x",read_value_stored);
+
+		Sent_Queue(Lux, Logging, "[INFO]", "Gain and Integration Time Success\n");
 
     //Interrupt control register write functuon
 		if(lux_write_register(Interrupt_Control_register, Interrupt_Register_Control))
@@ -204,9 +211,10 @@ uint8_t custom_test_lux_config(void)
 
 		if(lux_read_register(Interrupt_Control_register, &read_value_stored))
 		{
-				Error_Data(Lux, "[ERROR]Interrupt register not read successfully", ENOMSG, LOG_LINUX);
+				Error_Data(Lux, "[ERROR]Interrupt register not read successfully\n", ENOMSG, LOG_LINUX);
 				return 1;
 		}
+		printf("custom lux config %x",read_value_stored);
     Sent_Queue(Lux, Logging, "[INFO]", "Interrupt Control Register Success\n");
 
   		static uint8_t lux_data_write[2] = {0};
@@ -232,10 +240,12 @@ uint8_t custom_test_lux_config(void)
 		}
 		if(lux_read_reg(&lux_data_write[0], 2))
 		{
-				Error_Data(Lux, "[ERROR]Read Tlow Fail", errno, LOG_LINUX);
+				Error_Data(Lux, "[ERROR]Read Tlow Fail\n", errno, LOG_LINUX);
 				return 1;
 		}
-    Sent_Queue(Lux, Logging, "[INFO]", "\nInterrupt Threshold TLow Pass\n");
+		printf("custom lux config TLOW %x%x\n",lux_data_write[0],lux_data_write[1]);
+
+    Sent_Queue(Lux, Logging, "[INFO]", "Interrupt Threshold TLow Pass\n");
 
 		lux_data_write[0] = Word_Command_Reg (THresholdHIGHLOW);
 		if(lux_write_reg(&lux_data_write[0]))
@@ -258,10 +268,12 @@ uint8_t custom_test_lux_config(void)
 		}
 		if(lux_read_reg(&lux_data_write[0], 2))
 		{
-				Error_Data(Lux, "[ERROR]Thigh read failed", errno, LOG_LINUX);
+				Error_Data(Lux, "[ERROR]Thigh read failed\n", errno, LOG_LINUX);
 				return 1;
 		}
-    Sent_Queue(Lux, Logging, "INFO", "\nInterrupt Threshold THigh Pass\n");
+		printf("custom lux config THIGH %x%x\n",lux_data_write[0],lux_data_write[1]);
+
+    Sent_Queue(Lux, Logging, "[INFO]", "Interrupt Threshold THigh Pass\n");
 
     //Read read register
 		if(lux_read_register(Read_Register_ID, &read_value_stored))
@@ -269,7 +281,8 @@ uint8_t custom_test_lux_config(void)
 				Error_Data(Lux, "[ERROR]Reading failed from register\n", ENOMSG, LOG_LINUX);
 				return 1;
 		}
-    Sent_Queue(Lux, Logging, "INFO", "\nID Register Test Succeeded\n");
+    Sent_Queue(Lux, Logging, "INFO", "ID Register Test Succeeded\n");
+		printf("custom lux config read register %x%x\n",lux_data_write[0],lux_data_write[1]);
 
 		return 0;
 }
@@ -304,7 +317,7 @@ uint8_t get_lux(float *lux_final_value)
     temp4 = (lux_read_reg(&lux_data_write[0], 2));
     if(temp4)
     {
-    	Error_Data(Lux, "Data 0 not read", errno, LOG_LINUX);
+    	Error_Data(Lux, "Data 0 not read\n", errno, LOG_LINUX);
     	return 1;
     }
     value_CH0 = (float)((lux_data_write[1] << 8) | lux_data_write[0]);
@@ -317,7 +330,7 @@ uint8_t get_lux(float *lux_final_value)
   	}
     if(lux_read_reg(&lux_data_write[0], 2))
     {
-      Error_Data(Lux, "Data 1 not read", errno, LOG_LINUX);
+      Error_Data(Lux, "Data 1 not read\n", errno, LOG_LINUX);
     	return 1;
     }
 
@@ -373,13 +386,13 @@ uint8_t lux_initial_sensor(void)
 		File_Descripter_LUX = open(I2C_BUS, O_RDWR);
 		if(File_Descripter_LUX == -1)
 		{
-				Error_Data(Lux, "[ERROR]open(): I2C Bus", errno, LOG_LINUX);
+				Error_Data(Lux, "[ERROR]opening a I2C Bus\n", errno, LOG_LINUX);
 				return 1;
 		}
     //ioctl is used for multiple buses connected
 		if(ioctl(File_Descripter_LUX, I2C_SLAVE, 0x39) == -1)
 		{
-				Error_Data(Lux, "[ERROR]ioctl(): I2C Bus", errno, LOG_LINUX);
+				Error_Data(Lux, "[ERROR]ioctl error on  I2C Bus\n", errno, LOG_LINUX);
 				return 1;
 		}
 		return 0;
@@ -389,30 +402,31 @@ uint8_t LuxThread_Init(void)
 {
 		char Text[60];
 
-		sprintf(Text, "[INFO]Lux Thread successfully created with TID: %ld", syscall(SYS_gettid));
+		sprintf(Text, "[INFO]Lux Thread successfully created with TID: %ld\n", syscall(SYS_gettid));
 		Sent_Queue(Lux, Logging, "[INFO]", Text);
-    sprintf(Text, "[INFO]Lux Thread with PID: %ld", syscall(SYS_getpid));
+    sprintf(Text, "[INFO]Lux Thread with PID: %ld\n", syscall(SYS_getpid));
     Sent_Queue(Lux, Logging, "[INFO]", Text);
-		pthread_mutex_lock(&lock);
 
 		if(lux_initial_sensor() != 0)
     {
-      printf("[INFO]Lux not initialised properly");
-      Error_Data(Lux, "[Lux_Error]Not initialised lux sensor", ENOMSG, LOG_LINUX);
-      pthread_mutex_unlock(&lock);
+      printf("[INFO]Lux not initialised properly\n");
+      Error_Data(Lux, "[Lux_Error]Not initialised lux sensor\n", ENOMSG, LOG_LINUX);
+			flag = SIGUSR1;
+			if(Server_Killed_Externally())        printf("\n****************************************************Socket killing failed\n");
+			else	printf("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Socket killing successful\n");
+			Sent_Queue(Lux, Logging, "[INFO]", "Killing Socket\n");
       return 1;
     }
     else
 		{
       printf("[INFO]Lux Sensor ON\n");
-      Sent_Queue(Lux, Logging, "[INFO]", "\nLux Sensor Initiliazed Successfully\n");
+      Sent_Queue(Lux, Logging, "[INFO]", "Lux Sensor Initiliazed Successfully\n");
 	  }
 
 		if(custom_test_lux_config() != 0)
     {
-      printf("\n[INFO]BIST not proper");
-      Error_Data(Lux, "[Error_Lux]BIST Not Proper Initialised", ENOMSG, LOG_LINUX);
-      pthread_mutex_unlock(&lock);
+      printf("[INFO]BIST not proper\n");
+      Error_Data(Lux, "[Error_Lux]BIST Not Proper Initialised\n", ENOMSG, LOG_LINUX);
       return 1;
     }
 
@@ -422,8 +436,6 @@ uint8_t LuxThread_Init(void)
       Sent_Queue(Lux, Logging, "[INFO]", "Lux Sensor BST Pass\n");
 		}
 
-		pthread_mutex_unlock(&lock);
 		Sent_Queue(Lux, Logging, "[INFO]", "Normal Lux Queue started\n");
-
 		return 0;
 }

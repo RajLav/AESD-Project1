@@ -51,7 +51,7 @@ extern uint8_t SOCK_ST;
 extern uint8_t Counter;
 extern sig_atomic_t flag;
 extern uint8_t LogKillSafe;
-extern uint8_t RunningThreads; 
+extern uint8_t RunningThreads;
 
 /************** Global Defines *********************/
 #define SOCK_ON 			(1)
@@ -65,11 +65,10 @@ extern uint8_t RunningThreads;
 #define Fahrenheit			(2)
 #define Kelvin				(3)
 
-#define SENSOR_ON 			(1)
-#define SENSOR_OFF 			(0)
 
-#define TimerInterval		(250)
-#define RetryPeriod			(5000)
+
+#define TimerInterval		(1000)
+#define RetryPeriod			(2000)
 #define CountThresh		(RetryPeriod / TimerInterval)
 
 #define Alive_Testing_Interval		(2)
@@ -110,7 +109,7 @@ extern uint8_t RunningThreads;
 /********************** Enum defines ****************************/
 typedef enum
 {
-	Main = 1,Logging = 2,Socket = 3,Temp = 4,Lux =5
+	Main = 1,Logging = 2,Socket = 3,Temp_Log = 4,Lux =5
 } Sources;
 
 typedef struct Pthread_ArgsStruct
@@ -134,8 +133,10 @@ typedef enum{
 	LUX_QUEUE_E=4
 }QUEUE_ENUM;
 
-typedef enum{gpio53=0,gpio54=1,gpio55=2,gpio56=3}PINS;
+#define Reading_Flag		0xFF
 
+
+typedef enum{gpio53=0,gpio54=1,gpio55=2,gpio56=3}PINS;
 
 /********************** Array defines *****************************/
 char* LED_Dir_Path[]={"/sys/class/gpio/gpio53/direction",
@@ -155,6 +156,11 @@ char* SourceStrings[]={"Main Thread","Logging Thread","Socket Thread","Temp Thre
 void SendToThreadQ(uint8_t Src, uint8_t Dst, char* Log, char* Message);
 void Log_error(uint8_t Src, char* Err_Msg, int errnum, uint8_t SendToLogging);
 void gpio_on_off(uint8_t pin,uint8_t state);
+
+extern uint8_t LogKillSafe,RunningThreads,Lux_Error_Retry,LUX_SENSOR_ST;
+extern uint8_t IF_RETRY,Present_Temp_Sensor_Output;
+extern uint8_t lux_t_retry, lux_state_sensor;
+extern uint8_t temp_t_retry, temp_state_sensor;
 
 double GetTime();
 
